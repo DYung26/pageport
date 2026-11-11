@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "Pageport \u2014 quick page navigation",
+  "version": "1.0.0",
+  "description": "Save pages you revisit and open them from a focused side panel.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "sidePanel",
+    "contextMenus",
+    "commands"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Open Pageport"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+P"
+      },
+      "description": "Open Pageport"
+    },
+    "save-current-page": {
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
+      "description": "Save current page"
+    }
+  },
+  "icons": {
+    "16": "assets/icon16.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  }
+}
