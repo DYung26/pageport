@@ -27,6 +27,7 @@ test("routes normal browser actions to the side panel and isolates Pageport wind
   const removedWindows = [];
   const updatedTabs = [];
   const openedPanels = [];
+  const closedPanels = [];
   const apiCalls = [];
   const createdMenus = [];
   let panelBehavior;
@@ -67,7 +68,11 @@ test("routes normal browser actions to the side panel and isolates Pageport wind
         return { id: windowId };
       },
       async update(id, options) { focusedWindows.push({ id, ...options }); },
-      async remove(id) { removedWindows.push(id); },
+      async remove(id) {
+        removedWindows.push(id);
+        const index = popupTabs.findIndex((tab) => tab.windowId === id);
+        if (index !== -1) popupTabs.splice(index, 1);
+      },
     },
     tabs: {
       async query(options = {}) {
@@ -96,6 +101,7 @@ test("routes normal browser actions to the side panel and isolates Pageport wind
         }
         return Promise.resolve();
       },
+      async close(options) { closedPanels.push(options); },
     },
     storage: {
       local: {
@@ -109,13 +115,19 @@ test("routes normal browser actions to the side panel and isolates Pageport wind
   installed.listeners[0]();
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(panelBehavior, { openPanelOnActionClick: true });
-  assert.deepEqual(createdMenus.map((item) => item.id), ["pageport-open-pageport", "pageport-save-page"]);
+  assert.deepEqual(createdMenus.map((item) => item.id), [
+    "pageport-open-pageport",
+    "pageport-close-pageport",
+    "pageport-save-page",
+  ]);
   assert.deepEqual(windowRemoved.registrations[0].filters, { windowTypes: ["app"] });
 
   await contextMenuClicked.listeners[0]({ menuItemId: "pageport-open-pageport" }, normalTab);
   assert.deepEqual(openedPanels[0], { windowId: normalTab.windowId });
   assert.deepEqual(apiCalls.slice(0, 2).map(([name]) => name), ["sidePanel.open", "windows.get"], "sidePanel.open runs before the first await");
   assert.equal(createdWindows.length, 0, "normal browser windows do not create popup windows");
+  await contextMenuClicked.listeners[0]({ menuItemId: "pageport-close-pageport" }, normalTab);
+  assert.deepEqual(closedPanels, [{ windowId: normalTab.windowId }], "closing from a browser page closes only that window's side panel");
 
   await command.listeners[0]("open-pageport", normalTab);
   assert.deepEqual(openedPanels[1], { windowId: normalTab.windowId }, "the keyboard command uses the tab supplied by Chrome");
@@ -153,6 +165,15 @@ test("routes normal browser actions to the side panel and isolates Pageport wind
   assert.equal(updatedTabs[0].id, popupTabs[0].id);
   assert.equal(new URL(popupTabs[0].url).searchParams.get("sourceWindowId"), "20");
   assert.equal(new URL(popupTabs[1].url).searchParams.get("sourceWindowId"), "30");
+
+  const firstAppPopupWindowId = popupTabs[0].windowId;
+  await contextMenuClicked.listeners[0]({ menuItemId: "pageport-close-pageport" }, appOneTab);
+  assert.deepEqual(removedWindows, [firstAppPopupWindowId], "closing from one PWA removes only its associated Pageport popup");
+  assert.equal(popupTabs.some((tab) => new URL(tab.url).searchParams.get("sourceWindowId") === "30"), true);
+  await contextMenuClicked.listeners[0]({ menuItemId: "pageport-open-pageport" }, appOneTab);
+  assert.equal(createdWindows.length, 3, "opening again creates a new popup after its own popup was closed");
+  const replacementAppPopup = popupTabs.find((tab) => new URL(tab.url).searchParams.get("sourceWindowId") === "20");
+  assert.ok(replacementAppPopup);
 
   async function sendMessage(payload) {
     return new Promise((resolve) => {
@@ -195,12 +216,13 @@ test("routes normal browser actions to the side panel and isolates Pageport wind
 
   windowRemoved.listeners[0](20);
   await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(removedWindows, [popupTabs[0].windowId], "closing a PWA closes only its associated Pageport popup");
+  assert.deepEqual(removedWindows, [firstAppPopupWindowId, replacementAppPopup.windowId], "closing a PWA closes only its currently associated Pageport popup");
 
-  popupTabs[1].windowId = normalTab.windowId;
+  const secondAppPopup = popupTabs.find((tab) => new URL(tab.url).searchParams.get("sourceWindowId") === "30");
+  secondAppPopup.windowId = normalTab.windowId;
   windowRemoved.listeners[0](30);
   await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(removedWindows, [popupTabs[0].windowId], "a moved Pageport tab must not cause its containing browser window to close");
+  assert.deepEqual(removedWindows, [firstAppPopupWindowId, replacementAppPopup.windowId], "a moved Pageport tab must not cause its containing browser window to close");
 
   const normalSaved = await sendMessage({ type: "SAVE_ACTIVE_PAGE" });
   assert.equal(normalSaved.page.url, normalTab.url);

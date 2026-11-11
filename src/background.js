@@ -1,6 +1,7 @@
 import { readState, writeState } from "./storage.js";
 
 const MENU_OPEN_PAGEPORT = "pageport-open-pageport";
+const MENU_CLOSE_PAGEPORT = "pageport-close-pageport";
 const MENU_SAVE_PAGE = "pageport-save-page";
 const MESSAGE_SAVE_ACTIVE_PAGE = "SAVE_ACTIVE_PAGE";
 const MESSAGE_GET_ACTIVE_PAGE = "GET_ACTIVE_PAGE";
@@ -16,6 +17,11 @@ chrome.runtime.onInstalled.addListener(() => {
       contexts: ["page"],
     });
     chrome.contextMenus.create({
+      id: MENU_CLOSE_PAGEPORT,
+      title: "Close Pageport",
+      contexts: ["page"],
+    });
+    chrome.contextMenus.create({
       id: MENU_SAVE_PAGE,
       title: "Save page to Pageport",
       contexts: ["page", "link"],
@@ -26,6 +32,11 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === MENU_OPEN_PAGEPORT) {
     await openPageport(tab);
+    return;
+  }
+
+  if (info.menuItemId === MENU_CLOSE_PAGEPORT) {
+    await closePageport(tab);
     return;
   }
 
@@ -95,6 +106,21 @@ async function openPageportInLastFocusedAppWindow() {
   }
 
   await openPageportWindow(sourceWindow.id);
+}
+
+async function closePageport(sourceTab) {
+  if (!Number.isInteger(sourceTab?.windowId)) return;
+
+  const sourceWindow = await chrome.windows.get(sourceTab.windowId);
+  if (sourceWindow.type === "app") {
+    await closePageportWindowForSource(sourceTab.windowId);
+    return;
+  }
+
+  if (typeof chrome.sidePanel.close !== "function") {
+    throw new Error("Closing the side panel requires Chromium 141 or newer.");
+  }
+  await chrome.sidePanel.close({ windowId: sourceTab.windowId });
 }
 
 function openPageport(sourceTab) {

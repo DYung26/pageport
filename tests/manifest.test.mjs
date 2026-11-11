@@ -6,6 +6,7 @@ const manifest = JSON.parse(await readFile(new URL("../manifest.json", import.me
 
 test("configures a Manifest V3 side panel", () => {
   assert.equal(manifest.manifest_version, 3);
+  assert.equal(manifest.minimum_chrome_version, "141");
   assert.equal(manifest.side_panel.default_path, "sidepanel.html");
   assert.equal(manifest.background.type, "module");
   assert.ok(manifest.permissions.includes("sidePanel"));
@@ -19,6 +20,6 @@ test("declares only the required runtime permissions", () => {
 test("declares valid toolbar and save shortcuts", () => {
   assert.ok(manifest.commands["open-pageport"]);
   assert.equal(manifest.commands._execute_action, undefined);
-  assert.equal(manifest.commands["open-pageport"].suggested_key.default, "Alt+Shift+P");
+  assert.equal(manifest.commands["open-pageport"].suggested_key.default, "Alt+Shift+O");
   assert.ok(manifest.commands["save-current-page"]);
 });

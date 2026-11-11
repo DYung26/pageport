@@ -1,4 +1,5 @@
 import { normalizeState, readState, writeState } from "./storage.js";
+import { getPageportWindowTitle } from "./window-title.js";
 
 const STORAGE_KEY = "pageport-state";
 const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -20,6 +21,9 @@ const elements = {
   folderList: document.querySelector("#folder-list"),
   folderInput: document.querySelector("#new-folder"),
   settingsDialog: document.querySelector("#settings-dialog"),
+  openPageportShortcut: document.querySelector("#open-pageport-shortcut"),
+  saveCurrentPageShortcut: document.querySelector("#save-current-page-shortcut"),
+  shortcutStatus: document.querySelector("#shortcut-status"),
   toast: document.querySelector("#toast"),
   pageDialog: document.querySelector("#page-dialog"),
   pageName: document.querySelector("#page-name"),
@@ -34,6 +38,7 @@ let activePageId = null;
 let toastTimeout;
 
 await refreshActivePage();
+void refreshShortcutLabels();
 render();
 
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -95,6 +100,7 @@ document.addEventListener("keydown", (event) => {
 async function refreshActivePage() {
   const response = await chrome.runtime.sendMessage({ type: "GET_ACTIVE_PAGE", windowId: launchWindowId ?? undefined });
   const page = response?.page;
+  if (launchWindowId !== null) document.title = getPageportWindowTitle(page);
   const canSave = Boolean(page?.url && ["http:", "https:"].includes(new URL(page.url).protocol));
   if (canSave) {
     elements.activePage.textContent = page.title;
@@ -104,6 +110,33 @@ async function refreshActivePage() {
     elements.activePage.textContent = "This browser page cannot be saved";
   }
   elements.saveActive.disabled = !canSave;
+}
+
+async function refreshShortcutLabels() {
+  let commands;
+  try {
+    commands = await chrome.commands.getAll();
+  } catch {
+    elements.openPageportShortcut.textContent = "Unavailable";
+    elements.saveCurrentPageShortcut.textContent = "Unavailable";
+    elements.shortcutStatus.hidden = false;
+    elements.shortcutStatus.textContent = "Shortcut assignments could not be read from this browser.";
+    return;
+  }
+  const shortcuts = new Map(commands.map((command) => [command.name, command.shortcut]));
+  const openShortcut = shortcuts.get("open-pageport");
+  const saveShortcut = shortcuts.get("save-current-page");
+
+  elements.openPageportShortcut.textContent = openShortcut || "Not assigned";
+  elements.saveCurrentPageShortcut.textContent = saveShortcut || "Not assigned";
+  const missingShortcuts = [
+    !openShortcut && "Open Pageport",
+    !saveShortcut && "Save current page",
+  ].filter(Boolean);
+  elements.shortcutStatus.hidden = missingShortcuts.length === 0;
+  elements.shortcutStatus.textContent = missingShortcuts.length
+    ? `${missingShortcuts.join(" and ")} ${missingShortcuts.length === 1 ? "is" : "are"} not assigned. Choose a free key combination in your browser’s extension shortcut settings.`
+    : "";
 }
 
 function render() {
