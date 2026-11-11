@@ -17,6 +17,8 @@ test("declares only the required runtime permissions", () => {
 });
 
 test("declares valid toolbar and save shortcuts", () => {
-  assert.ok(manifest.commands._execute_action);
+  assert.ok(manifest.commands["open-pageport"]);
+  assert.equal(manifest.commands._execute_action, undefined);
+  assert.equal(manifest.commands["open-pageport"].suggested_key.default, "Alt+Shift+P");
   assert.ok(manifest.commands["save-current-page"]);
 });

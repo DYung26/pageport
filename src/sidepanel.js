@@ -2,6 +2,7 @@ import { normalizeState, readState, writeState } from "./storage.js";
 
 const STORAGE_KEY = "pageport-state";
 const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const launchTabId = getLaunchTabId();
 
 const elements = {
   activePage: document.querySelector("#active-page-label"),
@@ -30,6 +31,7 @@ const elements = {
 let state = await readState();
 let activeFilter = "all";
 let activePageId = null;
+let activeTabId = launchTabId;
 let toastTimeout;
 
 await refreshActivePage();
@@ -51,7 +53,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
 elements.saveActive.addEventListener("click", async () => {
   try {
-    const response = await chrome.runtime.sendMessage({ type: "SAVE_ACTIVE_PAGE" });
+    const response = await chrome.runtime.sendMessage({ type: "SAVE_ACTIVE_PAGE", tabId: activeTabId ?? undefined });
     if (response?.error) return showToast(response.error);
     showToast("Page saved to Pageport");
   } catch (error) {
@@ -92,10 +94,17 @@ document.addEventListener("keydown", (event) => {
 });
 
 async function refreshActivePage() {
-  const response = await chrome.runtime.sendMessage({ type: "GET_ACTIVE_PAGE" });
+  const response = await chrome.runtime.sendMessage({ type: "GET_ACTIVE_PAGE", tabId: launchTabId ?? undefined });
   const page = response?.page;
-  const canSave = page && ["http:", "https:"].includes(new URL(page.url).protocol);
-  elements.activePage.textContent = canSave ? page.title : "This browser page cannot be saved";
+  activeTabId = response?.tabId ?? null;
+  const canSave = Boolean(page?.url && ["http:", "https:"].includes(new URL(page.url).protocol));
+  if (canSave) {
+    elements.activePage.textContent = page.title;
+  } else if (launchTabId !== null && response?.error) {
+    elements.activePage.textContent = "The app page is no longer available";
+  } else {
+    elements.activePage.textContent = "This browser page cannot be saved";
+  }
   elements.saveActive.disabled = !canSave;
 }
 
@@ -193,10 +202,16 @@ async function navigateTo(page) {
   try {
     const url = new URL(page.url);
     if (!["http:", "https:"].includes(url.protocol)) return showToast("This saved address cannot be opened.");
-    const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    if (!activeTab?.id) return showToast("No active tab is available.");
+    let activeTab;
+    if (launchTabId !== null) {
+      activeTab = activeTabId === null ? null : await chrome.tabs.get(activeTabId);
+    } else {
+      [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    }
+    if (!activeTab?.id) return showToast("The page this window was opened from is no longer available.");
     await chrome.tabs.update(activeTab.id, { url: url.href });
     await refreshActivePage();
+    if (launchTabId !== null) await chrome.windows.update(activeTab.windowId, { focused: true });
     state.pages = state.pages.map((item) => item.id === page.id ? { ...item, updatedAt: Date.now() } : item);
     await persist();
   } catch (error) {
@@ -325,4 +340,11 @@ function showToast(message) {
 
 function isEditable(element) {
   return element instanceof HTMLElement && (element.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(element.tagName));
+}
+
+function getLaunchTabId() {
+  const value = new URLSearchParams(window.location.search).get("tabId");
+  if (value === null || value.trim() === "") return null;
+  const tabId = Number(value);
+  return Number.isSafeInteger(tabId) && tabId >= 0 ? tabId : null;
 }

@@ -21,7 +21,7 @@
     "default_title": "Open Pageport"
   },
   "commands": {
-    "_execute_action": {
+    "open-pageport": {
       "suggested_key": {
         "default": "Alt+Shift+P"
       },
