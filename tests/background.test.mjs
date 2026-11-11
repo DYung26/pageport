@@ -3,29 +3,38 @@ import assert from "node:assert/strict";
 
 function createEvent() {
   const listeners = [];
+  const registrations = [];
   return {
     listeners,
-    addListener(listener) {
+    registrations,
+    addListener(listener, filters) {
       listeners.push(listener);
+      registrations.push({ listener, filters });
     },
   };
 }
 
-test("routes Pageport to the side panel or standalone window based on the source window", async () => {
+test("routes normal browser actions to the side panel and isolates Pageport windows per PWA window", async () => {
   let storedState;
-  let activeTab = { id: 1, windowId: 10, url: "https://example.com/docs", title: "Example docs" };
-  const tabsById = new Map([[activeTab.id, activeTab]]);
-  const windowTypes = new Map([[10, "normal"]]);
+  const normalTab = { id: 1, windowId: 10, url: "https://example.com/docs", title: "Example docs" };
+  const appOneTab = { id: 2, windowId: 20, url: "https://app-one.example.com/home", title: "App One" };
+  const appTwoTab = { id: 3, windowId: 30, url: "https://app-two.example.com/home", title: "App Two" };
+  const tabsByWindow = new Map([[10, [normalTab]], [20, [appOneTab]], [30, [appTwoTab]]]);
+  const windowTypes = new Map([[10, "normal"], [20, "app"], [30, "app"]]);
   const popupTabs = [];
   const createdWindows = [];
   const focusedWindows = [];
+  const removedWindows = [];
   const updatedTabs = [];
   const openedPanels = [];
+  const apiCalls = [];
   const createdMenus = [];
   let panelBehavior;
+  let lastFocusedWindow = { id: 20, type: "app" };
   const installed = createEvent();
   const contextMenuClicked = createEvent();
   const command = createEvent();
+  const windowRemoved = createEvent();
   const message = createEvent();
 
   globalThis.chrome = {
@@ -40,35 +49,52 @@ test("routes Pageport to the side panel or standalone window based on the source
       create(options) { createdMenus.push(options); },
     },
     commands: { onCommand: command },
-    sidePanel: {
-      async setPanelBehavior(options) { panelBehavior = options; },
-      async open(options) { openedPanels.push(options); },
-    },
     windows: {
-      async get(id) { return { id, type: windowTypes.get(id) ?? "normal" }; },
+      onRemoved: windowRemoved,
+      async get(id) {
+        apiCalls.push(["windows.get", id]);
+        return { id, type: windowTypes.get(id) ?? "normal" };
+      },
+      async getLastFocused(options) {
+        assert.deepEqual(options, { windowTypes: ["app", "normal"] });
+        return lastFocusedWindow;
+      },
       async create(options) {
         createdWindows.push(options);
         const windowId = 100 + createdWindows.length;
+        windowTypes.set(windowId, "popup");
         popupTabs.push({ id: 200 + createdWindows.length, windowId, url: options.url });
         return { id: windowId };
       },
       async update(id, options) { focusedWindows.push({ id, ...options }); },
+      async remove(id) { removedWindows.push(id); },
     },
     tabs: {
       async query(options = {}) {
         if (options.url) return popupTabs;
-        return [activeTab];
-      },
-      async get(id) {
-        const tab = tabsById.get(id);
-        if (!tab) throw new Error(`No tab with id ${id}`);
-        return tab;
+        if (Number.isInteger(options.windowId)) {
+          return (tabsByWindow.get(options.windowId) ?? []).filter((tab) => !options.active || tab.active !== false);
+        }
+        return [normalTab];
       },
       async update(id, options) {
-        const tab = popupTabs.find((item) => item.id === id);
-        if (tab) Object.assign(tab, options);
+        const tab = [...tabsByWindow.values()].flat().find((item) => item.id === id);
+        const popupTab = popupTabs.find((item) => item.id === id);
+        const target = tab ?? popupTab;
+        if (target) Object.assign(target, options);
         updatedTabs.push({ id, ...options });
-        return tab;
+        return target;
+      },
+    },
+    sidePanel: {
+      async setPanelBehavior(options) { panelBehavior = options; },
+      open(options) {
+        apiCalls.push(["sidePanel.open", options]);
+        openedPanels.push(options);
+        if (windowTypes.get(options.windowId) === "app") {
+          return Promise.reject(new Error("Side panels are not supported in app windows"));
+        }
+        return Promise.resolve();
       },
     },
     storage: {
@@ -84,30 +110,49 @@ test("routes Pageport to the side panel or standalone window based on the source
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(panelBehavior, { openPanelOnActionClick: true });
   assert.deepEqual(createdMenus.map((item) => item.id), ["pageport-open-pageport", "pageport-save-page"]);
+  assert.deepEqual(windowRemoved.registrations[0].filters, { windowTypes: ["app"] });
 
-  await contextMenuClicked.listeners[0]({ menuItemId: "pageport-open-pageport" }, activeTab);
-  assert.deepEqual(openedPanels, [{ windowId: 10 }]);
+  await contextMenuClicked.listeners[0]({ menuItemId: "pageport-open-pageport" }, normalTab);
+  assert.deepEqual(openedPanels[0], { windowId: normalTab.windowId });
+  assert.deepEqual(apiCalls.slice(0, 2).map(([name]) => name), ["sidePanel.open", "windows.get"], "sidePanel.open runs before the first await");
+  assert.equal(createdWindows.length, 0, "normal browser windows do not create popup windows");
+
+  await command.listeners[0]("open-pageport", normalTab);
+  assert.deepEqual(openedPanels[1], { windowId: normalTab.windowId }, "the keyboard command uses the tab supplied by Chrome");
   assert.equal(createdWindows.length, 0);
 
-  const appTab = { id: 2, windowId: 20, url: "https://app.example.com", title: "Installed app" };
-  activeTab = appTab;
-  tabsById.set(appTab.id, appTab);
-  windowTypes.set(appTab.windowId, "app");
   await command.listeners[0]("open-pageport");
-  assert.equal(createdWindows.length, 1);
-  assert.equal(createdWindows[0].type, "popup");
-  assert.equal(createdWindows[0].width, 420);
-  assert.equal(new URL(createdWindows[0].url).searchParams.get("tabId"), String(appTab.id));
+  assert.equal(createdWindows.length, 1, "a shortcut without a tab uses the last-focused window only when it is a PWA");
+  assert.equal(new URL(createdWindows[0].url).searchParams.get("sourceWindowId"), "20");
 
-  const secondAppTab = { id: 3, windowId: 30, url: "https://another-app.example.com", title: "Another app" };
-  activeTab = secondAppTab;
-  tabsById.set(secondAppTab.id, secondAppTab);
-  windowTypes.set(secondAppTab.windowId, "app");
+  lastFocusedWindow = { id: 10, type: "normal" };
+  const originalWarn = console.warn;
+  let normalWindowWarnings = 0;
+  console.warn = () => { normalWindowWarnings += 1; };
   await command.listeners[0]("open-pageport");
-  assert.equal(createdWindows.length, 1, "a second app open reuses the existing Pageport window");
-  assert.equal(new URL(popupTabs[0].url).searchParams.get("tabId"), String(secondAppTab.id));
-  assert.deepEqual(focusedWindows, [{ id: popupTabs[0].windowId, focused: true }]);
+  console.warn = originalWarn;
+  assert.equal(normalWindowWarnings, 1, "without tab context, a normal window is not guessed as the shortcut source");
+  assert.equal(createdWindows.length, 1);
+
+  await command.listeners[0]("open-pageport", appOneTab);
+  assert.equal(createdWindows.length, 1, "the shortcut with the original tab reuses its app window popup");
+  assert.equal(createdWindows[0].type, "popup");
+  assert.equal(new URL(createdWindows[0].url).searchParams.get("sourceWindowId"), "20");
+
+  await contextMenuClicked.listeners[0]({ menuItemId: "pageport-open-pageport" }, appTwoTab);
+  assert.equal(createdWindows.length, 2, "a different PWA window gets its own Pageport window");
+  assert.equal(new URL(createdWindows[0].url).searchParams.get("sourceWindowId"), "20");
+  assert.equal(new URL(createdWindows[1].url).searchParams.get("sourceWindowId"), "30");
+
+  await command.listeners[0]("open-pageport", appOneTab);
+  assert.equal(createdWindows.length, 2, "reopening from the first PWA reuses only its associated Pageport window");
+  assert.deepEqual(focusedWindows, [
+    { id: popupTabs[0].windowId, focused: true },
+    { id: popupTabs[0].windowId, focused: true },
+  ]);
   assert.equal(updatedTabs[0].id, popupTabs[0].id);
+  assert.equal(new URL(popupTabs[0].url).searchParams.get("sourceWindowId"), "20");
+  assert.equal(new URL(popupTabs[1].url).searchParams.get("sourceWindowId"), "30");
 
   async function sendMessage(payload) {
     return new Promise((resolve) => {
@@ -116,35 +161,66 @@ test("routes Pageport to the side panel or standalone window based on the source
     });
   }
 
-  const appPageResponse = await sendMessage({ type: "GET_ACTIVE_PAGE", tabId: appTab.id });
-  assert.equal(appPageResponse.page.url, appTab.url);
-  assert.equal(appPageResponse.tabId, appTab.id);
-  const missingTabResponse = await sendMessage({ type: "GET_ACTIVE_PAGE", tabId: 999 });
-  assert.equal(missingTabResponse.page, null);
-  assert.ok(missingTabResponse.error);
+  const appOnePage = await sendMessage({ type: "GET_ACTIVE_PAGE", windowId: 20 });
+  const appTwoPage = await sendMessage({ type: "GET_ACTIVE_PAGE", windowId: 30 });
+  assert.equal(appOnePage.page.url, appOneTab.url);
+  assert.equal(appTwoPage.page.url, appTwoTab.url);
 
-  const appSaveResponse = await sendMessage({ type: "SAVE_ACTIVE_PAGE", tabId: appTab.id });
-  assert.equal(appSaveResponse.page.url, "https://app.example.com/");
+  lastFocusedWindow = { id: 30, type: "app" };
+  await command.listeners[0]("save-current-page");
+  assert.ok(storedState.pages.some((page) => page.url === appTwoTab.url), "a shortcut without tab context saves from the last-focused PWA");
 
-  activeTab = { id: 1, windowId: 10, url: "https://example.com/docs", title: "Example docs" };
-  tabsById.set(activeTab.id, activeTab);
-  const firstResponse = await sendMessage({ type: "SAVE_ACTIVE_PAGE" });
-  assert.equal(firstResponse.page.url, "https://example.com/docs");
+  const appOneSaved = await sendMessage({ type: "SAVE_ACTIVE_PAGE", windowId: 20 });
+  const appTwoSaved = await sendMessage({ type: "SAVE_ACTIVE_PAGE", windowId: 30 });
+  assert.equal(appOneSaved.page.url, appOneTab.url);
+  assert.equal(appTwoSaved.page.url, appTwoTab.url);
   assert.equal(storedState.pages.length, 2);
-  const originalId = storedState.pages.find((page) => page.url === activeTab.url).id;
 
-  activeTab = { ...activeTab, url: "https://example.com/docs", title: "Updated title" };
-  tabsById.set(activeTab.id, activeTab);
-  await sendMessage({ type: "SAVE_ACTIVE_PAGE" });
-  assert.equal(storedState.pages.length, 2);
-  const updatedPage = storedState.pages.find((page) => page.id === originalId);
-  assert.equal(updatedPage.title, "Updated title");
+  const appOneNavigation = await sendMessage({ type: "OPEN_SAVED_PAGE", windowId: 20, url: "https://saved.example.com/one" });
+  const appTwoNavigation = await sendMessage({ type: "OPEN_SAVED_PAGE", windowId: 30, url: "https://saved.example.com/two" });
+  assert.equal(appOneNavigation.tabId, appOneTab.id);
+  assert.equal(appTwoNavigation.tabId, appTwoTab.id);
+  assert.equal(appOneTab.url, "https://saved.example.com/one");
+  assert.equal(appTwoTab.url, "https://saved.example.com/two");
+  assert.deepEqual(focusedWindows.slice(2), [
+    { id: 20, focused: true },
+    { id: 30, focused: true },
+  ]);
+  const rejectedNavigation = await sendMessage({ type: "OPEN_SAVED_PAGE", windowId: 20, url: "javascript:alert(1)" });
+  assert.ok(rejectedNavigation.error);
 
-  activeTab = { ...activeTab, url: "chrome://settings", title: "Settings" };
-  tabsById.set(activeTab.id, activeTab);
-  const rejectedResponse = await sendMessage({ type: "SAVE_ACTIVE_PAGE" });
-  assert.equal(rejectedResponse.error, "Only web pages can be saved.");
+  const missingWindow = await sendMessage({ type: "GET_ACTIVE_PAGE", windowId: 999 });
+  assert.equal(missingWindow.page, null);
+  assert.ok(missingWindow.error);
 
-  await contextMenuClicked.listeners[0]({ linkUrl: "https://docs.example.org/help", linkText: "Help centre" }, activeTab);
+  windowRemoved.listeners[0](20);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(removedWindows, [popupTabs[0].windowId], "closing a PWA closes only its associated Pageport popup");
+
+  popupTabs[1].windowId = normalTab.windowId;
+  windowRemoved.listeners[0](30);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(removedWindows, [popupTabs[0].windowId], "a moved Pageport tab must not cause its containing browser window to close");
+
+  const normalSaved = await sendMessage({ type: "SAVE_ACTIVE_PAGE" });
+  assert.equal(normalSaved.page.url, normalTab.url);
+  assert.equal(storedState.pages.length, 3);
+
+  normalTab.title = "Example docs updated";
+  const duplicateSave = await sendMessage({ type: "SAVE_ACTIVE_PAGE" });
+  assert.equal(storedState.pages.length, 3, "saving an existing URL updates its entry instead of duplicating it");
+  assert.equal(duplicateSave.page.title, "Example docs updated");
+
+  const originalNormalUrl = normalTab.url;
+  normalTab.url = "chrome://settings";
+  const rejectedSave = await sendMessage({ type: "SAVE_ACTIVE_PAGE" });
+  assert.equal(rejectedSave.error, "Only web pages can be saved.");
+  normalTab.url = originalNormalUrl;
+
+  normalTab.url = "https://example.com/shortcut-save";
+  await command.listeners[0]("save-current-page", normalTab);
+  assert.ok(storedState.pages.some((page) => page.url === normalTab.url));
+
+  await contextMenuClicked.listeners[0]({ linkUrl: "https://docs.example.org/help", linkText: "Help centre" }, normalTab);
   assert.ok(storedState.pages.some((page) => page.title === "Help centre" && page.origin === "https://docs.example.org"));
 });
