@@ -16,6 +16,8 @@ function createEvent() {
 
 test("routes normal browser actions to the side panel and isolates Pageport windows per PWA window", async () => {
   let storedState;
+  let storageWrites = 0;
+  const runtimeMessages = [];
   const normalTab = { id: 1, windowId: 10, url: "https://example.com/docs", title: "Example docs" };
   const appOneTab = { id: 2, windowId: 20, url: "https://app-one.example.com/home", title: "App One" };
   const appTwoTab = { id: 3, windowId: 30, url: "https://app-two.example.com/home", title: "App Two" };
@@ -43,6 +45,10 @@ test("routes normal browser actions to the side panel and isolates Pageport wind
       onInstalled: installed,
       onMessage: message,
       getURL(path) { return `chrome-extension://pageport/${path}`; },
+      sendMessage(payload) {
+        runtimeMessages.push(payload);
+        return Promise.resolve();
+      },
     },
     contextMenus: {
       onClicked: contextMenuClicked,
@@ -106,7 +112,10 @@ test("routes normal browser actions to the side panel and isolates Pageport wind
     storage: {
       local: {
         async get(key) { return { [key]: storedState }; },
-        async set(values) { storedState = values["pageport-state"]; },
+        async set(values) {
+          storageWrites += 1;
+          storedState = values["pageport-state"];
+        },
       },
     },
   };
@@ -230,15 +239,20 @@ test("routes normal browser actions to the side panel and isolates Pageport wind
   assert.equal(normalSaved.page.archivedAt, null);
   assert.equal(storedState.pages.length, 3);
 
+  storedState.folders = [...storedState.folders, "Research"];
   storedState.pages = storedState.pages.map((page) => page.url === normalTab.url
-    ? { ...page, archivedAt: Date.now() - 1000 }
+    ? { ...page, archivedAt: Date.now() - 1000, folder: "Research", pinned: true }
     : page);
   normalTab.title = "Example docs updated";
+  const existingPage = structuredClone(storedState.pages.find((page) => page.url === normalTab.url));
+  const stateBeforeDuplicateSave = structuredClone(storedState);
+  const writesBeforeDuplicateSave = storageWrites;
   const duplicateSave = await sendMessage({ type: "SAVE_ACTIVE_PAGE" });
-  assert.equal(storedState.pages.length, 3, "saving an existing URL updates its entry instead of duplicating it");
-  assert.equal(duplicateSave.page.title, "Example docs updated");
-  assert.equal(duplicateSave.page.archivedAt, null, "saving an archived page restores it");
-  assert.equal(duplicateSave.page.lastUsedAt, duplicateSave.page.updatedAt);
+  assert.equal(storedState.pages.length, 3, "saving an existing URL does not duplicate it");
+  assert.equal(duplicateSave.alreadySaved, true);
+  assert.deepEqual(duplicateSave.page, existingPage, "the existing record is returned unchanged");
+  assert.deepEqual(storedState, stateBeforeDuplicateSave, "title, folder, pin, archive state, and timestamps stay untouched");
+  assert.equal(storageWrites, writesBeforeDuplicateSave, "duplicate saves do not write storage");
 
   const originalNormalUrl = normalTab.url;
   normalTab.url = "chrome://settings";
@@ -248,8 +262,19 @@ test("routes normal browser actions to the side panel and isolates Pageport wind
 
   normalTab.url = "https://example.com/shortcut-save";
   await command.listeners[0]("save-current-page", normalTab);
-  assert.ok(storedState.pages.some((page) => page.url === normalTab.url));
+  const shortcutSaved = storedState.pages.find((page) => page.url === normalTab.url);
+  assert.ok(shortcutSaved);
+  assert.deepEqual(runtimeMessages.at(-1), { type: "PAGE_SAVE_RESULT", alreadySaved: false });
+  normalTab.title = "Renamed after first save";
+  await command.listeners[0]("save-current-page", normalTab);
+  assert.equal(storedState.pages.find((page) => page.url === normalTab.url).title, shortcutSaved.title);
+  assert.deepEqual(runtimeMessages.at(-1), { type: "PAGE_SAVE_RESULT", alreadySaved: true });
 
   await contextMenuClicked.listeners[0]({ linkUrl: "https://docs.example.org/help", linkText: "Help centre" }, normalTab);
-  assert.ok(storedState.pages.some((page) => page.title === "Help centre" && page.origin === "https://docs.example.org"));
+  const contextMenuSaved = storedState.pages.find((page) => page.url === "https://docs.example.org/help");
+  assert.ok(contextMenuSaved && contextMenuSaved.title === "Help centre" && contextMenuSaved.origin === "https://docs.example.org");
+  assert.deepEqual(runtimeMessages.at(-1), { type: "PAGE_SAVE_RESULT", alreadySaved: false });
+  await contextMenuClicked.listeners[0]({ linkUrl: "https://docs.example.org/help", linkText: "Different link title" }, normalTab);
+  assert.equal(storedState.pages.find((page) => page.url === contextMenuSaved.url).title, "Help centre");
+  assert.deepEqual(runtimeMessages.at(-1), { type: "PAGE_SAVE_RESULT", alreadySaved: true });
 });

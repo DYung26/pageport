@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { bindPageDialog } from "../src/page-dialog.js";
 
 const html = await readFile(new URL("../sidepanel.html", import.meta.url), "utf8");
+const sidepanel = await readFile(new URL("../src/sidepanel.js", import.meta.url), "utf8");
 
 test("configures the edit page modal as a normal submitting form", () => {
   assert.match(html, /<form id="page-form">/);
@@ -59,4 +60,11 @@ test("the close button cancels editing without saving", () => {
 
 test("provides a dedicated archived-pages filter and count", () => {
   assert.match(html, /data-filter="archived" type="button">Archived <span id="archived-count">/);
+});
+
+
+test("shows a distinct confirmation when a page is already saved", () => {
+  assert.match(sidepanel, /response\?\.alreadySaved \? "Already saved in Pageport" : "Page saved to Pageport"/);
+  assert.match(sidepanel, /message\.type !== "PAGE_SAVE_RESULT"/);
+  assert.match(sidepanel, /message\.alreadySaved \? "Already saved in Pageport" : "Page saved to Pageport"/);
 });

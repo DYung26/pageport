@@ -57,6 +57,11 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) void archiveInactivePagesIfNeeded();
 });
 
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type !== "PAGE_SAVE_RESULT") return;
+  showToast(message.alreadySaved ? "Already saved in Pageport" : "Page saved to Pageport");
+});
+
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !changes[STORAGE_KEY]) return;
   state = normalizeState(changes[STORAGE_KEY].newValue);
@@ -75,7 +80,7 @@ elements.saveActive.addEventListener("click", async () => {
   try {
     const response = await chrome.runtime.sendMessage({ type: "SAVE_ACTIVE_PAGE", windowId: launchWindowId ?? undefined });
     if (response?.error) return showToast(response.error);
-    showToast("Page saved to Pageport");
+    showToast(response?.alreadySaved ? "Already saved in Pageport" : "Page saved to Pageport");
   } catch (error) {
     showToast(`Couldn't save this page: ${error.message}`);
   }

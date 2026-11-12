@@ -4,6 +4,7 @@ const MENU_OPEN_PAGEPORT = "pageport-open-pageport";
 const MENU_CLOSE_PAGEPORT = "pageport-close-pageport";
 const MENU_SAVE_PAGE = "pageport-save-page";
 const MESSAGE_SAVE_ACTIVE_PAGE = "SAVE_ACTIVE_PAGE";
+const MESSAGE_PAGE_SAVE_RESULT = "PAGE_SAVE_RESULT";
 const MESSAGE_GET_ACTIVE_PAGE = "GET_ACTIVE_PAGE";
 const MESSAGE_OPEN_SAVED_PAGE = "OPEN_SAVED_PAGE";
 const pendingPageportWindows = new Map();
@@ -41,7 +42,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 
   const url = info.linkUrl || tab?.url;
-  if (url && isWebPageUrl(url)) await savePage({ url, title: info.linkText || tab?.title });
+  if (url && isWebPageUrl(url)) {
+    const result = await savePage({ url, title: info.linkText || tab?.title });
+    notifyPageSaveResult(result);
+  }
 });
 
 chrome.commands.onCommand.addListener((command, tab) => {
@@ -56,12 +60,12 @@ chrome.commands.onCommand.addListener((command, tab) => {
 
   if (command === "save-current-page") {
     if (tab?.url && isWebPageUrl(tab.url)) {
-      return savePage({ url: tab.url, title: tab.title });
+      return savePage({ url: tab.url, title: tab.title }).then(notifyPageSaveResult);
     }
 
     return getLastFocusedTab().then((activeTab) => {
       if (activeTab?.url && isWebPageUrl(activeTab.url)) {
-        return savePage({ url: activeTab.url, title: activeTab.title });
+        return savePage({ url: activeTab.url, title: activeTab.title }).then(notifyPageSaveResult);
       }
     });
   }
@@ -78,7 +82,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     getActiveTab(message.windowId).then((tab) => {
       if (!tab?.url) throw new Error("The active tab has no saveable URL.");
       return savePage({ url: tab.url, title: tab.title });
-    }).then((page) => sendResponse({ page })).catch((error) => sendResponse({ error: error.message }));
+    }).then((result) => sendResponse({ page: result.page, alreadySaved: result.alreadySaved }))
+      .catch((error) => sendResponse({ error: error.message }));
     return true;
   }
 
@@ -254,26 +259,34 @@ async function savePage({ url, title }) {
 
   const state = await readState();
   const existing = state.pages.find((page) => page.url === parsed.href);
-  const now = Date.now();
-  const page = existing
-    ? { ...existing, title: title || existing.title, updatedAt: now, lastUsedAt: now, archivedAt: null }
-    : {
-        id: crypto.randomUUID(),
-        url: parsed.href,
-        title: title || parsed.hostname,
-        hostname: parsed.hostname,
-        origin: parsed.origin,
-        folder: "General",
-        pinned: false,
-        createdAt: now,
-        updatedAt: now,
-        lastUsedAt: now,
-        archivedAt: null,
-      };
+  if (existing) return { page: existing, alreadySaved: true };
 
-  state.pages = existing
-    ? state.pages.map((item) => item.id === existing.id ? page : item)
-    : [page, ...state.pages];
+  const now = Date.now();
+  const page = {
+    id: crypto.randomUUID(),
+    url: parsed.href,
+    title: title || parsed.hostname,
+    hostname: parsed.hostname,
+    origin: parsed.origin,
+    folder: "General",
+    pinned: false,
+    createdAt: now,
+    updatedAt: now,
+    lastUsedAt: now,
+    archivedAt: null,
+  };
+
+  state.pages = [page, ...state.pages];
   await writeState(state);
-  return page;
+  return { page, alreadySaved: false };
+}
+
+function notifyPageSaveResult(result) {
+  void chrome.runtime.sendMessage({
+    type: MESSAGE_PAGE_SAVE_RESULT,
+    alreadySaved: result.alreadySaved,
+  }).catch(() => {
+    // The Pageport UI may be closed; the save operation itself has already completed.
+  });
+  return result;
 }
