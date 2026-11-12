@@ -1,6 +1,6 @@
 const STORAGE_KEY = "pageport-state";
 
-export const DEFAULT_STATE = { pages: [], folders: ["General"] };
+export const DEFAULT_STATE = { pages: [], folders: ["General"], collapsedOrigins: [] };
 
 export async function readState() {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
@@ -21,6 +21,10 @@ export function normalizeState(value) {
     .map((folder) => folder.trim().slice(0, 40)))];
   if (!folders.includes("General")) folders.unshift("General");
 
+  const collapsedOrigins = [...new Set(
+    (Array.isArray(value.collapsedOrigins) ? value.collapsedOrigins : []).filter(isValidOrigin),
+  )];
+
   const pages = value.pages.filter(isValidPage).map((page) => {
     const url = new URL(page.url);
     return {
@@ -36,7 +40,17 @@ export function normalizeState(value) {
     };
   });
 
-  return { pages, folders };
+  return { pages, folders, collapsedOrigins };
+}
+
+export function isValidOrigin(value) {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) && url.origin === value;
+  } catch {
+    return false;
+  }
 }
 
 export function isValidPage(page) {

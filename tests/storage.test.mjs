@@ -16,6 +16,7 @@ const page = (overrides = {}) => ({
 test("returns an empty default for malformed storage", () => {
   assert.deepEqual(normalizeState(null), DEFAULT_STATE);
   assert.deepEqual(normalizeState({ pages: [], folders: "bad" }), DEFAULT_STATE);
+  assert.deepEqual(normalizeState({ pages: [], folders: ["General"] }).collapsedOrigins, []);
 });
 
 test("accepts only HTTP and HTTPS pages", () => {
@@ -45,6 +46,28 @@ test("drops malformed page entries", () => {
   assert.equal(state.pages.length, 1);
 });
 
+
+test("normalizes and deduplicates persisted collapsed origins", () => {
+  const state = normalizeState({
+    folders: ["General"],
+    pages: [],
+    collapsedOrigins: [
+      "https://example.com",
+      "https://example.com",
+      "http://example.com",
+      "https://example.com:8443",
+      "https://example.com/path",
+      "javascript:alert(1)",
+      null,
+    ],
+  });
+
+  assert.deepEqual(state.collapsedOrigins, [
+    "https://example.com",
+    "http://example.com",
+    "https://example.com:8443",
+  ]);
+});
 
 test("keeps protocol and port distinct when grouping origins", () => {
   const state = normalizeState({
@@ -84,6 +107,7 @@ test("reads and writes saved pages through extension local storage", async () =>
     const original = {
       folders: ["Research"],
       pages: [page()],
+      collapsedOrigins: ["https://example.com"],
     };
 
     await writeState(original);
@@ -92,6 +116,7 @@ test("reads and writes saved pages through extension local storage", async () =>
     assert.deepEqual(restored.folders, ["General", "Research"]);
     assert.equal(restored.pages.length, 1);
     assert.equal(restored.pages[0].url, "https://example.com/docs");
+    assert.deepEqual(restored.collapsedOrigins, ["https://example.com"]);
     assert.ok(values["pageport-state"]);
   } finally {
     if (previousChrome === undefined) delete globalThis.chrome;

@@ -1,6 +1,7 @@
 import { normalizeState, readState, writeState } from "./storage.js";
 import { getPageportWindowTitle } from "./window-title.js";
 import { bindPageDialog } from "./page-dialog.js";
+import { isOriginCollapsed, toggleOriginCollapsed } from "./origin-groups.js";
 
 const STORAGE_KEY = "pageport-state";
 const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -171,17 +172,47 @@ function sortPages(pages) {
 
 function renderOriginGroups(pages) {
   const groups = Map.groupBy(pages, (page) => page.origin);
-  return [...groups].map(([origin, groupPages]) => {
+  return [...groups].map(([origin, groupPages], index) => {
     const group = document.createElement("section");
     group.className = "origin-group";
+
+    const collapsed = isOriginCollapsed(state, origin);
     const heading = document.createElement("div");
     heading.className = "origin-heading";
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "origin-toggle";
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    toggle.setAttribute("aria-controls", `origin-pages-${index}`);
+    toggle.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} ${origin}`);
+    toggle.title = `${collapsed ? "Expand" : "Collapse"} ${origin}`;
+
     const name = document.createElement("span");
+    name.className = "origin-name";
     name.textContent = origin;
     const count = document.createElement("span");
+    count.className = "origin-count";
     count.textContent = `${groupPages.length} ${groupPages.length === 1 ? "page" : "pages"}`;
-    heading.append(name, count);
-    group.append(heading, ...groupPages.map(createPageCard));
+    const chevron = document.createElement("span");
+    chevron.className = "origin-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    chevron.textContent = "⌄";
+
+    toggle.append(name, count, chevron);
+    toggle.addEventListener("click", async () => {
+      state = toggleOriginCollapsed(state, origin);
+      await persist();
+    });
+
+    const content = document.createElement("div");
+    content.className = "origin-pages";
+    content.id = `origin-pages-${index}`;
+    content.hidden = collapsed;
+    content.append(...groupPages.map(createPageCard));
+
+    heading.append(toggle);
+    group.append(heading, content);
     return group;
   });
 }
@@ -346,7 +377,11 @@ async function importBackup(event) {
     const imported = normalizeState(payload);
     const merged = new Map(state.pages.map((page) => [page.url, page]));
     imported.pages.forEach((page) => merged.set(page.url, { ...merged.get(page.url), ...page }));
-    state = normalizeState({ pages: [...merged.values()], folders: [...state.folders, ...imported.folders] });
+    state = normalizeState({
+      pages: [...merged.values()],
+      folders: [...state.folders, ...imported.folders],
+      collapsedOrigins: [...new Set([...state.collapsedOrigins, ...imported.collapsedOrigins])],
+    });
     await persist();
     showToast("Backup imported");
   } catch (error) {
