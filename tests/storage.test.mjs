@@ -86,6 +86,24 @@ test("keeps protocol and port distinct when grouping origins", () => {
   ]);
 });
 
+test("migrates legacy usage timestamps and normalizes archive state", () => {
+  const state = normalizeState({
+    folders: ["General"],
+    pages: [
+      page({ updatedAt: 321 }),
+      page({ id: "archived", updatedAt: 654, archivedAt: 987, lastUsedAt: 456 }),
+      page({ id: "invalid", updatedAt: 999, archivedAt: "yesterday" }),
+    ],
+  });
+
+  assert.equal(state.pages[0].lastUsedAt, 321);
+  assert.equal(state.pages[0].archivedAt, null);
+  assert.equal(state.pages[1].lastUsedAt, 456);
+  assert.equal(state.pages[1].archivedAt, 987);
+  assert.equal(state.pages[2].lastUsedAt, 999);
+  assert.equal(state.pages[2].archivedAt, null);
+});
+
 test("reads and writes saved pages through extension local storage", async () => {
   const previousChrome = globalThis.chrome;
   const values = {};
@@ -106,7 +124,7 @@ test("reads and writes saved pages through extension local storage", async () =>
     const { readState, writeState } = await import("../src/storage.js");
     const original = {
       folders: ["Research"],
-      pages: [page()],
+      pages: [page({ lastUsedAt: 180, archivedAt: 170 })],
       collapsedOrigins: ["https://example.com"],
     };
 
@@ -116,6 +134,8 @@ test("reads and writes saved pages through extension local storage", async () =>
     assert.deepEqual(restored.folders, ["General", "Research"]);
     assert.equal(restored.pages.length, 1);
     assert.equal(restored.pages[0].url, "https://example.com/docs");
+    assert.equal(restored.pages[0].lastUsedAt, 180);
+    assert.equal(restored.pages[0].archivedAt, 170);
     assert.deepEqual(restored.collapsedOrigins, ["https://example.com"]);
     assert.ok(values["pageport-state"]);
   } finally {

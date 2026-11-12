@@ -256,7 +256,7 @@ async function savePage({ url, title }) {
   const existing = state.pages.find((page) => page.url === parsed.href);
   const now = Date.now();
   const page = existing
-    ? { ...existing, title: title || existing.title, updatedAt: now }
+    ? { ...existing, title: title || existing.title, updatedAt: now, lastUsedAt: now, archivedAt: null }
     : {
         id: crypto.randomUUID(),
         url: parsed.href,
@@ -267,6 +267,8 @@ async function savePage({ url, title }) {
         pinned: false,
         createdAt: now,
         updatedAt: now,
+        lastUsedAt: now,
+        archivedAt: null,
       };
 
   state.pages = existing

@@ -12,6 +12,7 @@ test("configures the edit page modal as a normal submitting form", () => {
   assert.doesNotMatch(pageDialog, /method="dialog"/);
   assert.match(html, /id="save-page-changes" type="submit"/);
   assert.match(html, /id="close-page-dialog" type="button"/);
+  assert.match(html, /id="archive-page" type="button">Archive page<\/button>/);
   assert.match(html, /id="page-name"[^>]*required/);
 });
 
@@ -53,4 +54,9 @@ test("the close button cancels editing without saving", () => {
 
   assert.equal(saveCount, 0);
   assert.equal(closeCount, 1);
+});
+
+
+test("provides a dedicated archived-pages filter and count", () => {
+  assert.match(html, /data-filter="archived" type="button">Archived <span id="archived-count">/);
 });

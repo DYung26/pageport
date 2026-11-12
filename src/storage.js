@@ -37,6 +37,10 @@ export function normalizeState(value) {
       pinned: page.pinned === true,
       createdAt: Number.isFinite(page.createdAt) ? page.createdAt : Date.now(),
       updatedAt: Number.isFinite(page.updatedAt) ? page.updatedAt : Date.now(),
+      lastUsedAt: Number.isFinite(page.lastUsedAt)
+        ? page.lastUsedAt
+        : Number.isFinite(page.updatedAt) ? page.updatedAt : Number.isFinite(page.createdAt) ? page.createdAt : Date.now(),
+      archivedAt: Number.isFinite(page.archivedAt) ? page.archivedAt : null,
     };
   });
 

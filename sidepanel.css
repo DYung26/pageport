@@ -69,3 +69,8 @@ kbd { border: 1px solid #394649; border-radius: 4px; padding: 2px 5px; font: 10p
 .danger-button { border:1px solid #714e45;border-radius:7px;padding:9px 11px;background:#382622;color:#ffab91;font-size:10px; }
 
 .save-button:disabled { cursor: not-allowed; opacity: .45; }
+
+.page-dialog-secondary-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.secondary-button { border: 1px solid #46645b; border-radius: 7px; padding: 9px 11px; background: #1a302b; color: var(--mint); font-size: 10px; }
+.page-card.is-archived { border-style: dashed; }
+.page-card.is-archived .page-title { color: #a8b6b6; }

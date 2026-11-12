@@ -45,6 +45,7 @@
           <button class="filter active" data-filter="all" type="button">All pages <span id="all-count">0</span></button>
           <button class="filter" data-filter="pinned" type="button">Pinned</button>
           <button class="filter" data-filter="recent" type="button">Recent</button>
+          <button class="filter" data-filter="archived" type="button">Archived <span id="archived-count">0</span></button>
         </div>
       </section>
 
@@ -72,6 +73,7 @@
       <form method="dialog">
         <div class="dialog-heading"><div><p class="eyebrow">PREFERENCES</p><h2>Pageport settings</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></div>
         <p class="setting-note">Your saved pages stay in this browser profile. Export a backup before moving to another device.</p>
+        <p class="setting-note">Pages unused for 30 days are moved to Archive automatically. Pinned pages are exempt; you can also archive or restore any page from its options.</p>
         <div class="settings-actions"><button id="export-data" type="button">Export backup</button><label class="import-button">Import backup<input id="import-data" type="file" accept="application/json"></label></div>
         <p class="setting-note">Keyboard shortcuts: <kbd>/</kbd> search, <kbd id="open-pageport-shortcut">Checking…</kbd> open Pageport, <kbd id="save-current-page-shortcut">Checking…</kbd> save current page. Change these in your browser’s extension shortcut settings.</p>
         <p class="setting-note" id="shortcut-status" hidden></p>
@@ -84,7 +86,7 @@
         <input id="page-name" class="dialog-input" maxlength="500" required>
         <label class="new-folder-label" for="page-folder">Folder</label>
         <select id="page-folder" class="dialog-input"></select>
-        <div class="page-dialog-actions"><button class="danger-button" id="delete-page" type="button">Delete page</button><button class="save-button" id="save-page-changes" type="submit">Save changes</button></div>
+        <div class="page-dialog-actions"><div class="page-dialog-secondary-actions"><button class="secondary-button" id="archive-page" type="button">Archive page</button><button class="danger-button" id="delete-page" type="button">Delete page</button></div><button class="save-button" id="save-page-changes" type="submit">Save changes</button></div>
       </form>
     </dialog>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>

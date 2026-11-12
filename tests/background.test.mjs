@@ -226,12 +226,19 @@ test("routes normal browser actions to the side panel and isolates Pageport wind
 
   const normalSaved = await sendMessage({ type: "SAVE_ACTIVE_PAGE" });
   assert.equal(normalSaved.page.url, normalTab.url);
+  assert.equal(normalSaved.page.lastUsedAt, normalSaved.page.updatedAt);
+  assert.equal(normalSaved.page.archivedAt, null);
   assert.equal(storedState.pages.length, 3);
 
+  storedState.pages = storedState.pages.map((page) => page.url === normalTab.url
+    ? { ...page, archivedAt: Date.now() - 1000 }
+    : page);
   normalTab.title = "Example docs updated";
   const duplicateSave = await sendMessage({ type: "SAVE_ACTIVE_PAGE" });
   assert.equal(storedState.pages.length, 3, "saving an existing URL updates its entry instead of duplicating it");
   assert.equal(duplicateSave.page.title, "Example docs updated");
+  assert.equal(duplicateSave.page.archivedAt, null, "saving an archived page restores it");
+  assert.equal(duplicateSave.page.lastUsedAt, duplicateSave.page.updatedAt);
 
   const originalNormalUrl = normalTab.url;
   normalTab.url = "chrome://settings";

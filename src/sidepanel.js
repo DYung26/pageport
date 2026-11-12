@@ -2,9 +2,11 @@ import { normalizeState, readState, writeState } from "./storage.js";
 import { getPageportWindowTitle } from "./window-title.js";
 import { bindPageDialog } from "./page-dialog.js";
 import { isOriginCollapsed, toggleOriginCollapsed } from "./origin-groups.js";
+import { archiveInactivePages, setPageArchived } from "./archive.js";
 
 const STORAGE_KEY = "pageport-state";
 const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const ARCHIVE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 const launchWindowId = getLaunchWindowId();
 
 const elements = {
@@ -19,6 +21,7 @@ const elements = {
   libraryTitle: document.querySelector("#library-title"),
   resultCount: document.querySelector("#result-count"),
   allCount: document.querySelector("#all-count"),
+  archivedCount: document.querySelector("#archived-count"),
   folderDialog: document.querySelector("#folder-dialog"),
   folderList: document.querySelector("#folder-list"),
   folderInput: document.querySelector("#new-folder"),
@@ -32,10 +35,15 @@ const elements = {
   closePageDialog: document.querySelector("#close-page-dialog"),
   pageName: document.querySelector("#page-name"),
   pageFolder: document.querySelector("#page-folder"),
+  archivePage: document.querySelector("#archive-page"),
   deletePage: document.querySelector("#delete-page"),
 };
 
 let state = await readState();
+const archivedBeforeStartup = state.pages.filter((page) => page.archivedAt !== null).length;
+state = archiveInactivePages(state);
+const startupArchivedCount = state.pages.filter((page) => page.archivedAt !== null).length - archivedBeforeStartup;
+if (startupArchivedCount) await writeState(state);
 let activeFilter = "all";
 let activePageId = null;
 let toastTimeout;
@@ -43,6 +51,11 @@ let toastTimeout;
 await refreshActivePage();
 void refreshShortcutLabels();
 render();
+if (startupArchivedCount) showToast(`${startupArchivedCount} inactive ${startupArchivedCount === 1 ? "page was" : "pages were"} moved to Archive`);
+window.setInterval(() => void archiveInactivePagesIfNeeded(), ARCHIVE_CHECK_INTERVAL_MS);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) void archiveInactivePagesIfNeeded();
+});
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !changes[STORAGE_KEY]) return;
@@ -95,6 +108,7 @@ bindPageDialog({
   dialog: elements.pageDialog,
   onSave: savePageChanges,
 });
+elements.archivePage.addEventListener("click", toggleArchiveActivePage);
 elements.deletePage.addEventListener("click", removeActivePage);
 document.querySelector("#export-data").addEventListener("click", exportBackup);
 document.querySelector("#import-data").addEventListener("change", importBackup);
@@ -149,25 +163,38 @@ async function refreshShortcutLabels() {
 
 function render() {
   const query = elements.search.value.trim().toLocaleLowerCase();
-  const pages = sortPages(state.pages).filter((page) => {
+  const archivedPages = state.pages.filter((page) => page.archivedAt !== null);
+  const activePages = state.pages.filter((page) => page.archivedAt === null);
+  const pagePool = activeFilter === "archived" ? archivedPages : activePages;
+  const pages = sortPages(pagePool).filter((page) => {
     if (activeFilter === "pinned" && !page.pinned) return false;
-    if (activeFilter === "recent" && Date.now() - page.updatedAt > RECENT_WINDOW_MS) return false;
+    if (activeFilter === "recent" && Date.now() - page.lastUsedAt > RECENT_WINDOW_MS) return false;
     return `${page.title} ${page.hostname} ${page.url} ${page.folder}`.toLocaleLowerCase().includes(query);
   });
 
-  elements.allCount.textContent = state.pages.length;
+  elements.allCount.textContent = activePages.length;
+  elements.archivedCount.textContent = archivedPages.length;
   elements.resultCount.textContent = `${pages.length} ${pages.length === 1 ? "PAGE" : "PAGES"}`;
-  elements.libraryTitle.textContent = activeFilter === "pinned" ? "Pinned pages" : activeFilter === "recent" ? "Recently opened" : "Your pages";
+  elements.libraryTitle.textContent = activeFilter === "pinned" ? "Pinned pages"
+    : activeFilter === "recent" ? "Recently opened"
+      : activeFilter === "archived" ? "Archived pages" : "Your pages";
   elements.pageList.replaceChildren(...renderOriginGroups(pages));
   elements.emptyState.hidden = pages.length > 0;
-  elements.emptyTitle.textContent = state.pages.length ? "No matching pages" : "Nothing saved yet";
-  elements.emptyCopy.textContent = state.pages.length
-    ? "Try another search or switch the page filter."
-    : "Save this page or use the context menu on any link to build your shortcuts.";
+  elements.emptyTitle.textContent = query ? "No matching pages"
+    : activeFilter === "archived" ? "No archived pages"
+      : activeFilter === "pinned" ? "No pinned pages"
+        : activeFilter === "recent" ? "No recent pages"
+          : state.pages.length ? "All pages are archived" : "Nothing saved yet";
+  elements.emptyCopy.textContent = query ? "Try another search or clear your query."
+    : activeFilter === "archived" ? "Pages you archive or leave unused for 30 days will appear here."
+      : activeFilter === "pinned" ? "Pin a page from its page options to keep it easy to find."
+        : activeFilter === "recent" ? "Pages used in the last 7 days appear here."
+          : state.pages.length ? "Your saved pages are safe in Archive. Restore one to bring it back here."
+            : "Save this page or use the context menu on any link to build your shortcuts.";
 }
 
 function sortPages(pages) {
-  return [...pages].sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.updatedAt - left.updatedAt);
+  return [...pages].sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.lastUsedAt - left.lastUsedAt);
 }
 
 function renderOriginGroups(pages) {
@@ -219,6 +246,7 @@ function renderOriginGroups(pages) {
 function createPageCard(page) {
   const card = document.createElement("article");
   card.className = "page-card";
+  card.classList.toggle("is-archived", page.archivedAt !== null);
 
   const icon = document.createElement("div");
   icon.className = "site-icon";
@@ -235,7 +263,7 @@ function createPageCard(page) {
   title.textContent = page.title || page.hostname;
   const domain = document.createElement("span");
   domain.className = "page-domain";
-  domain.textContent = `${formatPath(page.url)} · ${page.folder}`;
+  domain.textContent = `${formatPath(page.url)} · ${page.folder}${page.archivedAt !== null ? " · Archived" : ""}`;
   main.append(title, domain);
   main.addEventListener("click", () => navigateTo(page));
   main.addEventListener("keydown", (event) => {
@@ -277,7 +305,10 @@ async function navigateTo(page) {
     });
     if (response?.error) return showToast(response.error);
     await refreshActivePage();
-    state.pages = state.pages.map((item) => item.id === page.id ? { ...item, updatedAt: Date.now() } : item);
+    const now = Date.now();
+    state.pages = state.pages.map((item) => item.id === page.id
+      ? { ...item, updatedAt: now, lastUsedAt: now, archivedAt: null }
+      : item);
     await persist();
   } catch (error) {
     showToast(`Couldn't open this page: ${error.message}`);
@@ -299,7 +330,18 @@ function openPageDialog(page) {
     option.selected = folder === page.folder;
     return option;
   }));
+  elements.archivePage.textContent = page.archivedAt === null ? "Archive page" : "Restore page";
   elements.pageDialog.showModal();
+}
+
+async function toggleArchiveActivePage() {
+  const page = state.pages.find((item) => item.id === activePageId);
+  if (!page) return elements.pageDialog.close();
+  const wasArchived = page.archivedAt !== null;
+  state = setPageArchived(state, activePageId, !wasArchived);
+  await persist();
+  elements.pageDialog.close();
+  showToast(wasArchived ? "Page restored" : "Page archived");
 }
 
 async function savePageChanges() {
@@ -388,6 +430,16 @@ async function importBackup(event) {
   } finally {
     event.target.value = "";
   }
+}
+
+async function archiveInactivePagesIfNeeded() {
+  const nextState = archiveInactivePages(state);
+  if (nextState === state) return;
+  const archivedCount = nextState.pages.filter((page) => page.archivedAt !== null).length
+    - state.pages.filter((page) => page.archivedAt !== null).length;
+  state = nextState;
+  await persist();
+  showToast(`${archivedCount} inactive ${archivedCount === 1 ? "page was" : "pages were"} moved to Archive`);
 }
 
 async function persist() {
