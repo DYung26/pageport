@@ -78,13 +78,13 @@
       </form>
     </dialog>
     <dialog id="page-dialog" class="dialog page-dialog">
-      <form method="dialog">
-        <div class="dialog-heading"><div><p class="eyebrow">PAGE SETTINGS</p><h2>Edit saved page</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></div>
+      <form id="page-form">
+        <div class="dialog-heading"><div><p class="eyebrow">PAGE SETTINGS</p><h2>Edit saved page</h2></div><button class="icon-button" id="close-page-dialog" type="button" aria-label="Close">×</button></div>
         <label class="new-folder-label" for="page-name">Page name</label>
         <input id="page-name" class="dialog-input" maxlength="500" required>
         <label class="new-folder-label" for="page-folder">Folder</label>
         <select id="page-folder" class="dialog-input"></select>
-        <div class="page-dialog-actions"><button class="danger-button" id="delete-page" type="button">Delete page</button><button class="save-button" id="save-page-changes" type="button">Save changes</button></div>
+        <div class="page-dialog-actions"><button class="danger-button" id="delete-page" type="button">Delete page</button><button class="save-button" id="save-page-changes" type="submit">Save changes</button></div>
       </form>
     </dialog>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>

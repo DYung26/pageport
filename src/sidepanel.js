@@ -1,5 +1,6 @@
 import { normalizeState, readState, writeState } from "./storage.js";
 import { getPageportWindowTitle } from "./window-title.js";
+import { bindPageDialog } from "./page-dialog.js";
 
 const STORAGE_KEY = "pageport-state";
 const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -26,10 +27,11 @@ const elements = {
   shortcutStatus: document.querySelector("#shortcut-status"),
   toast: document.querySelector("#toast"),
   pageDialog: document.querySelector("#page-dialog"),
+  pageForm: document.querySelector("#page-form"),
+  closePageDialog: document.querySelector("#close-page-dialog"),
   pageName: document.querySelector("#page-name"),
   pageFolder: document.querySelector("#page-folder"),
   deletePage: document.querySelector("#delete-page"),
-  savePageChanges: document.querySelector("#save-page-changes"),
 };
 
 let state = await readState();
@@ -86,7 +88,12 @@ elements.folderInput.addEventListener("keydown", (event) => {
   event.preventDefault();
   addFolder();
 });
-elements.savePageChanges.addEventListener("click", savePageChanges);
+bindPageDialog({
+  form: elements.pageForm,
+  closeButton: elements.closePageDialog,
+  dialog: elements.pageDialog,
+  onSave: savePageChanges,
+});
 elements.deletePage.addEventListener("click", removeActivePage);
 document.querySelector("#export-data").addEventListener("click", exportBackup);
 document.querySelector("#import-data").addEventListener("change", importBackup);
