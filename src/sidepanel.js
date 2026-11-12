@@ -197,7 +197,6 @@ function renderOriginGroups(pages) {
     const chevron = document.createElement("span");
     chevron.className = "origin-chevron";
     chevron.setAttribute("aria-hidden", "true");
-    chevron.textContent = "⌄";
 
     toggle.append(name, count, chevron);
     toggle.addEventListener("click", async () => {
