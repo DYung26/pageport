@@ -62,3 +62,39 @@ test("keeps protocol and port distinct when grouping origins", () => {
     "https://example.com:8443",
   ]);
 });
+
+test("reads and writes saved pages through extension local storage", async () => {
+  const previousChrome = globalThis.chrome;
+  const values = {};
+  globalThis.chrome = {
+    storage: {
+      local: {
+        async get(key) {
+          return { [key]: values[key] };
+        },
+        async set(update) {
+          Object.assign(values, update);
+        },
+      },
+    },
+  };
+
+  try {
+    const { readState, writeState } = await import("../src/storage.js");
+    const original = {
+      folders: ["Research"],
+      pages: [page()],
+    };
+
+    await writeState(original);
+    const restored = await readState();
+
+    assert.deepEqual(restored.folders, ["General", "Research"]);
+    assert.equal(restored.pages.length, 1);
+    assert.equal(restored.pages[0].url, "https://example.com/docs");
+    assert.ok(values["pageport-state"]);
+  } finally {
+    if (previousChrome === undefined) delete globalThis.chrome;
+    else globalThis.chrome = previousChrome;
+  }
+});
