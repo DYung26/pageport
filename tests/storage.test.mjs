@@ -19,6 +19,13 @@ test("returns an empty default for malformed storage", () => {
   assert.deepEqual(normalizeState({ pages: [], folders: ["General"] }).collapsedOrigins, []);
 });
 
+test("defaults to grouped layout and accepts only supported view modes", () => {
+  assert.equal(DEFAULT_STATE.viewMode, "grouped");
+  assert.equal(normalizeState({ folders: ["General"], pages: [] }).viewMode, "grouped");
+  assert.equal(normalizeState({ folders: ["General"], pages: [], viewMode: "list" }).viewMode, "list");
+  assert.equal(normalizeState({ folders: ["General"], pages: [], viewMode: "unknown" }).viewMode, "grouped");
+});
+
 test("accepts only HTTP and HTTPS pages", () => {
   assert.equal(isValidPage(page()), true);
   assert.equal(isValidPage(page({ url: "javascript:alert(1)" })), false);
@@ -126,6 +133,7 @@ test("reads and writes saved pages through extension local storage", async () =>
       folders: ["Research"],
       pages: [page({ lastUsedAt: 180, archivedAt: 170 })],
       collapsedOrigins: ["https://example.com"],
+      viewMode: "list",
     };
 
     await writeState(original);
@@ -137,6 +145,7 @@ test("reads and writes saved pages through extension local storage", async () =>
     assert.equal(restored.pages[0].lastUsedAt, 180);
     assert.equal(restored.pages[0].archivedAt, 170);
     assert.deepEqual(restored.collapsedOrigins, ["https://example.com"]);
+    assert.equal(restored.viewMode, "list");
     assert.ok(values["pageport-state"]);
   } finally {
     if (previousChrome === undefined) delete globalThis.chrome;

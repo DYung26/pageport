@@ -68,3 +68,13 @@ test("shows a distinct confirmation when a page is already saved", () => {
   assert.match(sidepanel, /message\.type !== "PAGE_SAVE_RESULT"/);
   assert.match(sidepanel, /message\.alreadySaved \? "Already saved in Pageport" : "Page saved to Pageport"/);
 });
+
+
+test("provides an accessible grouped and list layout switch", () => {
+  assert.match(html, /id="view-switch" role="group" aria-label="Page layout"/);
+  assert.match(html, /data-view-mode="grouped" type="button" aria-pressed="true"/);
+  assert.match(html, /data-view-mode="list" type="button" aria-pressed="false"/);
+  assert.match(sidepanel, /elements\.viewSwitch\.addEventListener\("click"/);
+  assert.match(sidepanel, /state\.viewMode === "list" \? pages\.map\(createPageCard\) : renderOriginGroups\(pages\)/);
+  assert.match(sidepanel, /payload\.viewMode === "list" \|\| payload\.viewMode === "grouped"/);
+});

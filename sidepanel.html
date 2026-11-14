@@ -50,7 +50,16 @@
       </section>
 
       <section class="library" aria-live="polite">
-        <div class="library-heading"><h2 id="library-title">Your pages</h2><span id="result-count">0 SAVED</span></div>
+        <div class="library-heading">
+          <h2 id="library-title">Your pages</h2>
+          <div class="library-tools">
+            <div class="view-switch" id="view-switch" role="group" aria-label="Page layout">
+              <button class="view-option active" data-view-mode="grouped" type="button" aria-pressed="true" title="Group pages by website">Grouped</button>
+              <button class="view-option" data-view-mode="list" type="button" aria-pressed="false" title="Show all pages in one list">List</button>
+            </div>
+            <span id="result-count">0 SAVED</span>
+          </div>
+        </div>
         <div id="page-list" class="page-list"></div>
         <div id="empty-state" class="empty-state" hidden>
           <div class="empty-glyph" aria-hidden="true">↗</div>

@@ -1,6 +1,6 @@
 const STORAGE_KEY = "pageport-state";
 
-export const DEFAULT_STATE = { pages: [], folders: ["General"], collapsedOrigins: [] };
+export const DEFAULT_STATE = { pages: [], folders: ["General"], collapsedOrigins: [], viewMode: "grouped" };
 
 export async function readState() {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
@@ -44,7 +44,12 @@ export function normalizeState(value) {
     };
   });
 
-  return { pages, folders, collapsedOrigins };
+  return {
+    pages,
+    folders,
+    collapsedOrigins,
+    viewMode: value.viewMode === "list" ? "list" : "grouped",
+  };
 }
 
 export function isValidOrigin(value) {

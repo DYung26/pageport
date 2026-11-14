@@ -3,6 +3,7 @@ import { getPageportWindowTitle } from "./window-title.js";
 import { bindPageDialog } from "./page-dialog.js";
 import { isOriginCollapsed, toggleOriginCollapsed } from "./origin-groups.js";
 import { archiveInactivePages, setPageArchived } from "./archive.js";
+import { sortPagesByLastUsed } from "./page-order.js";
 
 const STORAGE_KEY = "pageport-state";
 const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -14,6 +15,7 @@ const elements = {
   saveActive: document.querySelector("#save-active"),
   search: document.querySelector("#search"),
   filters: document.querySelector("#filters"),
+  viewSwitch: document.querySelector("#view-switch"),
   pageList: document.querySelector("#page-list"),
   emptyState: document.querySelector("#empty-state"),
   emptyTitle: document.querySelector("#empty-title"),
@@ -95,6 +97,15 @@ elements.filters.addEventListener("click", (event) => {
   render();
 });
 
+elements.viewSwitch.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-view-mode]");
+  if (!button) return;
+  const viewMode = button.dataset.viewMode;
+  if ((viewMode !== "grouped" && viewMode !== "list") || viewMode === state.viewMode) return;
+  state = { ...state, viewMode };
+  await persist();
+});
+
 document.querySelector("#manage-folders").addEventListener("click", () => {
   renderFolders();
   elements.folderDialog.showModal();
@@ -171,19 +182,26 @@ function render() {
   const archivedPages = state.pages.filter((page) => page.archivedAt !== null);
   const activePages = state.pages.filter((page) => page.archivedAt === null);
   const pagePool = activeFilter === "archived" ? archivedPages : activePages;
-  const pages = sortPages(pagePool).filter((page) => {
+  const filteredPages = pagePool.filter((page) => {
     if (activeFilter === "pinned" && !page.pinned) return false;
     if (activeFilter === "recent" && Date.now() - page.lastUsedAt > RECENT_WINDOW_MS) return false;
     return `${page.title} ${page.hostname} ${page.url} ${page.folder}`.toLocaleLowerCase().includes(query);
   });
+  const pages = state.viewMode === "list" ? sortPagesByLastUsed(filteredPages) : sortPages(filteredPages);
 
   elements.allCount.textContent = activePages.length;
   elements.archivedCount.textContent = archivedPages.length;
   elements.resultCount.textContent = `${pages.length} ${pages.length === 1 ? "PAGE" : "PAGES"}`;
+  elements.viewSwitch.querySelectorAll("[data-view-mode]").forEach((button) => {
+    const active = button.dataset.viewMode === state.viewMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  elements.pageList.classList.toggle("is-flat", state.viewMode === "list");
   elements.libraryTitle.textContent = activeFilter === "pinned" ? "Pinned pages"
     : activeFilter === "recent" ? "Recently opened"
       : activeFilter === "archived" ? "Archived pages" : "Your pages";
-  elements.pageList.replaceChildren(...renderOriginGroups(pages));
+  elements.pageList.replaceChildren(...(state.viewMode === "list" ? pages.map(createPageCard) : renderOriginGroups(pages)));
   elements.emptyState.hidden = pages.length > 0;
   elements.emptyTitle.textContent = query ? "No matching pages"
     : activeFilter === "archived" ? "No archived pages"
@@ -423,10 +441,14 @@ async function importBackup(event) {
     const imported = normalizeState(payload);
     const merged = new Map(state.pages.map((page) => [page.url, page]));
     imported.pages.forEach((page) => merged.set(page.url, { ...merged.get(page.url), ...page }));
+    const importedViewMode = payload.viewMode === "list" || payload.viewMode === "grouped"
+      ? payload.viewMode
+      : state.viewMode;
     state = normalizeState({
       pages: [...merged.values()],
       folders: [...state.folders, ...imported.folders],
       collapsedOrigins: [...new Set([...state.collapsedOrigins, ...imported.collapsedOrigins])],
+      viewMode: importedViewMode,
     });
     await persist();
     showToast("Backup imported");
