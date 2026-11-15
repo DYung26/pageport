@@ -4,6 +4,7 @@ import { bindPageDialog } from "./page-dialog.js";
 import { isOriginCollapsed, toggleOriginCollapsed } from "./origin-groups.js";
 import { archiveInactivePages, setPageArchived } from "./archive.js";
 import { sortPagesByLastUsed } from "./page-order.js";
+import { bindHoverSearchFocus } from "./sidepanel-focus.js";
 
 const STORAGE_KEY = "pageport-state";
 const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -40,6 +41,12 @@ const elements = {
   archivePage: document.querySelector("#archive-page"),
   deletePage: document.querySelector("#delete-page"),
 };
+
+bindHoverSearchFocus({
+  root: document.documentElement,
+  searchInput: elements.search,
+  dialogs: [elements.folderDialog, elements.settingsDialog, elements.pageDialog],
+});
 
 let state = await readState();
 const archivedBeforeStartup = state.pages.filter((page) => page.archivedAt !== null).length;

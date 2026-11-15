@@ -78,3 +78,9 @@ test("provides an accessible grouped and list layout switch", () => {
   assert.match(sidepanel, /state\.viewMode === "list" \? pages\.map\(createPageCard\) : renderOriginGroups\(pages\)/);
   assert.match(sidepanel, /payload\.viewMode === "list" \|\| payload\.viewMode === "grouped"/);
 });
+
+
+test("focuses the library search when the mouse enters Pageport", () => {
+  assert.match(sidepanel, /import \{ bindHoverSearchFocus \} from "\.\/sidepanel-focus\.js"/);
+  assert.match(sidepanel, /bindHoverSearchFocus\(\{\s*root: document\.documentElement,\s*searchInput: elements\.search,\s*dialogs: \[elements\.folderDialog, elements\.settingsDialog, elements\.pageDialog\],\s*\}\)/);
+});
