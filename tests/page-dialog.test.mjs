@@ -85,6 +85,11 @@ test("focuses the library search when the mouse enters Pageport", () => {
   assert.match(sidepanel, /bindHoverSearchFocus\(\{\s*root: document\.documentElement,\s*searchInput: elements\.search,\s*dialogs: \[elements\.folderDialog, elements\.settingsDialog, elements\.pageDialog\],\s*\}\)/);
 });
 
+test("uses the no-folder sentinel when rendering the unfiltered library title", () => {
+  assert.match(sidepanel, /activeFolder === NO_FOLDER_FILTER/);
+  assert.doesNotMatch(sidepanel, /\bALL_FOLDERS\b/);
+});
+
 test("provides one folder dropdown that refines the current page filter", () => {
   assert.ok(html.includes('id="filters" role="group" aria-label="Page filters">'));
   assert.ok(html.includes('id="folder-filter" aria-label="Filter pages by folder"'));

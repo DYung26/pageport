@@ -221,7 +221,7 @@ function render() {
   const filterTitle = activeFilter === "pinned" ? "Pinned pages"
     : activeFilter === "recent" ? "Recently opened"
       : activeFilter === "archived" ? "Archived pages" : "Your pages";
-  elements.libraryTitle.textContent = activeFolder === ALL_FOLDERS
+  elements.libraryTitle.textContent = activeFolder === NO_FOLDER_FILTER
     ? filterTitle
     : activeFilter === "all" ? `${activeFolder} pages` : `${filterTitle} · ${activeFolder}`;
   elements.pageList.replaceChildren(...(state.viewMode === "list" ? pages.map(createPageCard) : renderGroupedPages(pages)));
