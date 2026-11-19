@@ -47,8 +47,12 @@
           <button class="filter" data-filter="pinned" type="button">Pinned</button>
           <button class="filter" data-filter="recent" type="button">Recent</button>
           <button class="filter" data-filter="archived" type="button">Archived <span id="archived-count">0</span></button>
+          <label class="folder-filter-wrap">
+            <select class="folder-filter-select" id="folder-filter" aria-label="Filter pages by folder">
+              <option value="">Folder</option>
+            </select>
+          </label>
         </div>
-        <div class="folder-filters" id="folder-filters" role="group" aria-label="Filter by folder"></div>
       </section>
 
       <section class="library" aria-live="polite">

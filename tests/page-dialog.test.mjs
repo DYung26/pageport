@@ -85,11 +85,17 @@ test("focuses the library search when the mouse enters Pageport", () => {
   assert.match(sidepanel, /bindHoverSearchFocus\(\{\s*root: document\.documentElement,\s*searchInput: elements\.search,\s*dialogs: \[elements\.folderDialog, elements\.settingsDialog, elements\.pageDialog\],\s*\}\)/);
 });
 
-test("provides a visible folder navigation control in the library", () => {
-  assert.ok(html.includes("id=\"folder-filters\" role=\"group\" aria-label=\"Filter by folder\""));
-  assert.ok(sidepanel.includes("elements.folderFilters.addEventListener(\"click\""));
+test("provides one folder dropdown that refines the current page filter", () => {
+  assert.ok(html.includes('id="filters" role="group" aria-label="Page filters">'));
+  assert.ok(html.includes('id="folder-filter" aria-label="Filter pages by folder"'));
+  assert.ok(html.indexOf('id="folder-filter"') > html.indexOf('data-filter="archived"'));
+  assert.ok(html.indexOf('id="folder-filter"') < html.indexOf('</div>', html.indexOf('id="filters"')));
+  assert.ok(html.includes('<option value="">Folder</option>'));
+  assert.ok(!html.includes('id="folder-filters"'));
+  assert.ok(!html.includes('All folders'));
+  assert.ok(sidepanel.includes('elements.folderFilter.addEventListener("change"'));
   assert.ok(sidepanel.includes("filterPagesByFolder(matchingPages, activeFolder)"));
-  assert.ok(sidepanel.includes("renderFolderFilters(matchingPages)"));
+  assert.ok(sidepanel.includes("renderFolderFilter(matchingPages)"));
 });
 
 test("renders all starred pages in one top-level group before website groups", () => {

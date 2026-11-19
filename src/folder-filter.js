@@ -1,7 +1,7 @@
-export const ALL_FOLDERS = "all";
+export const NO_FOLDER_FILTER = "";
 
 export function filterPagesByFolder(pages, folder) {
-  return folder === ALL_FOLDERS ? [...pages] : pages.filter((page) => page.folder === folder);
+  return folder === NO_FOLDER_FILTER ? [...pages] : pages.filter((page) => page.folder === folder);
 }
 
 export function countPagesByFolder(pages) {
