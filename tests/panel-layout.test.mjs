@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 const html = await readFile(new URL("../sidepanel.html", import.meta.url), "utf8");
 const css = await readFile(new URL("../sidepanel.css", import.meta.url), "utf8");
 
-test("keeps the header and footer outside the independently scrollable content", () => {
+test("keeps the header and footer outside the scrolling content", () => {
   const headerIndex = html.indexOf("<header class=\"topbar\">");
   const contentIndex = html.indexOf("<div class=\"scroll-content\">");
   const welcomeIndex = html.indexOf("<section class=\"welcome\">");
@@ -17,10 +17,10 @@ test("keeps the header and footer outside the independently scrollable content",
   assert.ok(scrollEndIndex < footerIndex);
 });
 
-test("locks the panel viewport while allowing its content region to scroll", () => {
+test("overlays fixed header and footer above content that scrolls underneath", () => {
   assert.match(css, /body\s*\{[^}]*height:\s*100dvh;[^}]*overflow:\s*hidden;/s);
-  assert.match(css, /\.shell\s*\{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\) auto;/s);
-  assert.match(css, /\.scroll-content\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;/s);
-  assert.match(css, /\.topbar\s*\{[^}]*z-index:\s*2;/s);
-  assert.match(css, /\.footer\s*\{[^}]*z-index:\s*2;/s);
+  assert.match(css, /\.shell\s*\{[^}]*position:\s*relative;[^}]*height:\s*100dvh;/s);
+  assert.match(css, /\.topbar\s*\{[^}]*position:\s*absolute;[^}]*top:\s*0;[^}]*z-index:\s*2;/s);
+  assert.match(css, /\.scroll-content\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*overflow-y:\s*auto;[^}]*padding:\s*56px 0 calc\(58px \+ env\(safe-area-inset-bottom\)\);/s);
+  assert.match(css, /\.footer\s*\{[^}]*position:\s*absolute;[^}]*bottom:\s*0;[^}]*z-index:\s*2;/s);
 });
