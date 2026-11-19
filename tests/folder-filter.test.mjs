@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ALL_FOLDERS, countPagesByFolder, filterPagesByFolder } from "../src/folder-filter.js";
+import { NO_FOLDER_FILTER, countPagesByFolder, filterPagesByFolder } from "../src/folder-filter.js";
 
 const pages = [
   { id: "one", folder: "General" },
@@ -9,8 +9,8 @@ const pages = [
   { id: "four", folder: "Personal" },
 ];
 
-test("returns every page for the all-folders view", () => {
-  const result = filterPagesByFolder(pages, ALL_FOLDERS);
+test("returns every page when no folder is selected", () => {
+  const result = filterPagesByFolder(pages, NO_FOLDER_FILTER);
   assert.deepEqual(result, pages);
   assert.notEqual(result, pages);
 });

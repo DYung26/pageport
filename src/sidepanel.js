@@ -5,7 +5,7 @@ import { isOriginCollapsed, toggleOriginCollapsed } from "./origin-groups.js";
 import { archiveInactivePages, setPageArchived } from "./archive.js";
 import { sortPagesByLastUsed, sortPagesForGroupedView } from "./page-order.js";
 import { bindHoverSearchFocus } from "./sidepanel-focus.js";
-import { ALL_FOLDERS, countPagesByFolder, filterPagesByFolder } from "./folder-filter.js";
+import { NO_FOLDER_FILTER, countPagesByFolder, filterPagesByFolder } from "./folder-filter.js";
 
 const STORAGE_KEY = "pageport-state";
 const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -17,7 +17,7 @@ const elements = {
   saveActive: document.querySelector("#save-active"),
   search: document.querySelector("#search"),
   filters: document.querySelector("#filters"),
-  folderFilters: document.querySelector("#folder-filters"),
+  folderFilter: document.querySelector("#folder-filter"),
   viewSwitch: document.querySelector("#view-switch"),
   pageList: document.querySelector("#page-list"),
   emptyState: document.querySelector("#empty-state"),
@@ -57,7 +57,7 @@ state = archiveInactivePages(state);
 const startupArchivedCount = state.pages.filter((page) => page.archivedAt !== null).length - archivedBeforeStartup;
 if (startupArchivedCount) await writeState(state);
 let activeFilter = "all";
-let activeFolder = ALL_FOLDERS;
+let activeFolder = NO_FOLDER_FILTER;
 let activePageId = null;
 let toastTimeout;
 
@@ -78,7 +78,7 @@ chrome.runtime.onMessage.addListener((message) => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !changes[STORAGE_KEY]) return;
   state = normalizeState(changes[STORAGE_KEY].newValue);
-  if (activeFolder !== ALL_FOLDERS && !state.folders.includes(activeFolder)) activeFolder = ALL_FOLDERS;
+  if (activeFolder !== NO_FOLDER_FILTER && !state.folders.includes(activeFolder)) activeFolder = NO_FOLDER_FILTER;
   render();
 });
 
@@ -109,10 +109,8 @@ elements.filters.addEventListener("click", (event) => {
   render();
 });
 
-elements.folderFilters.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-folder-filter]");
-  if (!button) return;
-  activeFolder = button.dataset.folderFilter;
+elements.folderFilter.addEventListener("change", () => {
+  activeFolder = elements.folderFilter.value;
   render();
 });
 
@@ -218,7 +216,7 @@ function render() {
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
   });
-  renderFolderFilters(matchingPages);
+  renderFolderFilter(matchingPages);
   elements.pageList.classList.toggle("is-flat", state.viewMode === "list");
   const filterTitle = activeFilter === "pinned" ? "Pinned pages"
     : activeFilter === "recent" ? "Recently opened"
@@ -232,34 +230,26 @@ function render() {
   elements.emptyCopy.textContent = getEmptyCopy(query);
 }
 
-function renderFolderFilters(pages) {
+function renderFolderFilter(pages) {
   const counts = countPagesByFolder(pages);
-  const folders = [
-    { name: "All folders", value: ALL_FOLDERS, count: pages.length },
-    ...state.folders.map((folder) => ({ name: folder, value: folder, count: counts.get(folder) ?? 0 })),
+  const options = [
+    { name: "Folder", value: NO_FOLDER_FILTER },
+    ...state.folders.map((folder) => ({ name: `${folder} (${counts.get(folder) ?? 0})`, value: folder })),
   ];
 
-  elements.folderFilters.replaceChildren(...folders.map(({ name, value, count }) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "folder-filter";
-    button.classList.toggle("active", value === activeFolder);
-    button.dataset.folderFilter = value;
-    button.setAttribute("aria-pressed", String(value === activeFolder));
-
-    const label = document.createElement("span");
-    label.textContent = name;
-    const total = document.createElement("span");
-    total.className = "folder-filter-count";
-    total.textContent = count;
-    button.append(label, total);
-    return button;
+  elements.folderFilter.replaceChildren(...options.map(({ name, value }) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = name;
+    return option;
   }));
+  elements.folderFilter.value = activeFolder;
+  elements.folderFilter.classList.toggle("has-selection", activeFolder !== NO_FOLDER_FILTER);
 }
 
 function getEmptyTitle(query) {
   if (query) return "No matching pages";
-  if (activeFolder !== ALL_FOLDERS) {
+  if (activeFolder !== NO_FOLDER_FILTER) {
     const filterName = activeFilter === "pinned" ? "pinned" : activeFilter === "recent" ? "recent" : activeFilter === "archived" ? "archived" : "";
     return filterName ? `No ${filterName} pages in ${activeFolder}` : `No pages in ${activeFolder}`;
   }
@@ -271,7 +261,7 @@ function getEmptyTitle(query) {
 
 function getEmptyCopy(query) {
   if (query) return "Try another search or clear your query.";
-  if (activeFolder !== ALL_FOLDERS) return "Assign pages to this folder from a page’s options.";
+  if (activeFolder !== NO_FOLDER_FILTER) return "Assign pages to this folder from a page’s options.";
   return activeFilter === "archived" ? "Pages you archive or leave unused for 30 days will appear here."
     : activeFilter === "pinned" ? "Pin a page from its page options to keep it easy to find."
       : activeFilter === "recent" ? "Pages used in the last 7 days appear here."
@@ -529,7 +519,7 @@ function renderFolders() {
 async function removeFolder(folder) {
   state.pages = state.pages.map((page) => page.folder === folder ? { ...page, folder: "General" } : page);
   state.folders = state.folders.filter((item) => item !== folder);
-  if (activeFolder === folder) activeFolder = ALL_FOLDERS;
+  if (activeFolder === folder) activeFolder = NO_FOLDER_FILTER;
   await persist();
   renderFolders();
 }
