@@ -5,6 +5,7 @@ import { isOriginCollapsed, toggleOriginCollapsed } from "./origin-groups.js";
 import { archiveInactivePages, setPageArchived } from "./archive.js";
 import { sortPagesByLastUsed } from "./page-order.js";
 import { bindHoverSearchFocus } from "./sidepanel-focus.js";
+import { ALL_FOLDERS, countPagesByFolder, filterPagesByFolder } from "./folder-filter.js";
 
 const STORAGE_KEY = "pageport-state";
 const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -16,6 +17,7 @@ const elements = {
   saveActive: document.querySelector("#save-active"),
   search: document.querySelector("#search"),
   filters: document.querySelector("#filters"),
+  folderFilters: document.querySelector("#folder-filters"),
   viewSwitch: document.querySelector("#view-switch"),
   pageList: document.querySelector("#page-list"),
   emptyState: document.querySelector("#empty-state"),
@@ -54,6 +56,7 @@ state = archiveInactivePages(state);
 const startupArchivedCount = state.pages.filter((page) => page.archivedAt !== null).length - archivedBeforeStartup;
 if (startupArchivedCount) await writeState(state);
 let activeFilter = "all";
+let activeFolder = ALL_FOLDERS;
 let activePageId = null;
 let toastTimeout;
 
@@ -74,6 +77,7 @@ chrome.runtime.onMessage.addListener((message) => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !changes[STORAGE_KEY]) return;
   state = normalizeState(changes[STORAGE_KEY].newValue);
+  if (activeFolder !== ALL_FOLDERS && !state.folders.includes(activeFolder)) activeFolder = ALL_FOLDERS;
   render();
 });
 
@@ -101,6 +105,13 @@ elements.filters.addEventListener("click", (event) => {
   if (!button) return;
   activeFilter = button.dataset.filter;
   elements.filters.querySelectorAll(".filter").forEach((filter) => filter.classList.toggle("active", filter === button));
+  render();
+});
+
+elements.folderFilters.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-folder-filter]");
+  if (!button) return;
+  activeFolder = button.dataset.folderFilter;
   render();
 });
 
@@ -189,11 +200,12 @@ function render() {
   const archivedPages = state.pages.filter((page) => page.archivedAt !== null);
   const activePages = state.pages.filter((page) => page.archivedAt === null);
   const pagePool = activeFilter === "archived" ? archivedPages : activePages;
-  const filteredPages = pagePool.filter((page) => {
+  const matchingPages = pagePool.filter((page) => {
     if (activeFilter === "pinned" && !page.pinned) return false;
     if (activeFilter === "recent" && Date.now() - page.lastUsedAt > RECENT_WINDOW_MS) return false;
     return `${page.title} ${page.hostname} ${page.url} ${page.folder}`.toLocaleLowerCase().includes(query);
   });
+  const filteredPages = filterPagesByFolder(matchingPages, activeFolder);
   const pages = state.viewMode === "list" ? sortPagesByLastUsed(filteredPages) : sortPages(filteredPages);
 
   elements.allCount.textContent = activePages.length;
@@ -204,23 +216,65 @@ function render() {
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
   });
+  renderFolderFilters(matchingPages);
   elements.pageList.classList.toggle("is-flat", state.viewMode === "list");
-  elements.libraryTitle.textContent = activeFilter === "pinned" ? "Pinned pages"
+  const filterTitle = activeFilter === "pinned" ? "Pinned pages"
     : activeFilter === "recent" ? "Recently opened"
       : activeFilter === "archived" ? "Archived pages" : "Your pages";
+  elements.libraryTitle.textContent = activeFolder === ALL_FOLDERS
+    ? filterTitle
+    : activeFilter === "all" ? `${activeFolder} pages` : `${filterTitle} · ${activeFolder}`;
   elements.pageList.replaceChildren(...(state.viewMode === "list" ? pages.map(createPageCard) : renderOriginGroups(pages)));
   elements.emptyState.hidden = pages.length > 0;
-  elements.emptyTitle.textContent = query ? "No matching pages"
-    : activeFilter === "archived" ? "No archived pages"
-      : activeFilter === "pinned" ? "No pinned pages"
-        : activeFilter === "recent" ? "No recent pages"
-          : state.pages.length ? "All pages are archived" : "Nothing saved yet";
-  elements.emptyCopy.textContent = query ? "Try another search or clear your query."
-    : activeFilter === "archived" ? "Pages you archive or leave unused for 30 days will appear here."
-      : activeFilter === "pinned" ? "Pin a page from its page options to keep it easy to find."
-        : activeFilter === "recent" ? "Pages used in the last 7 days appear here."
-          : state.pages.length ? "Your saved pages are safe in Archive. Restore one to bring it back here."
-            : "Save this page or use the context menu on any link to build your shortcuts.";
+  elements.emptyTitle.textContent = getEmptyTitle(query);
+  elements.emptyCopy.textContent = getEmptyCopy(query);
+}
+
+function renderFolderFilters(pages) {
+  const counts = countPagesByFolder(pages);
+  const folders = [
+    { name: "All folders", value: ALL_FOLDERS, count: pages.length },
+    ...state.folders.map((folder) => ({ name: folder, value: folder, count: counts.get(folder) ?? 0 })),
+  ];
+
+  elements.folderFilters.replaceChildren(...folders.map(({ name, value, count }) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "folder-filter";
+    button.classList.toggle("active", value === activeFolder);
+    button.dataset.folderFilter = value;
+    button.setAttribute("aria-pressed", String(value === activeFolder));
+
+    const label = document.createElement("span");
+    label.textContent = name;
+    const total = document.createElement("span");
+    total.className = "folder-filter-count";
+    total.textContent = count;
+    button.append(label, total);
+    return button;
+  }));
+}
+
+function getEmptyTitle(query) {
+  if (query) return "No matching pages";
+  if (activeFolder !== ALL_FOLDERS) {
+    const filterName = activeFilter === "pinned" ? "pinned" : activeFilter === "recent" ? "recent" : activeFilter === "archived" ? "archived" : "";
+    return filterName ? `No ${filterName} pages in ${activeFolder}` : `No pages in ${activeFolder}`;
+  }
+  return activeFilter === "archived" ? "No archived pages"
+    : activeFilter === "pinned" ? "No pinned pages"
+      : activeFilter === "recent" ? "No recent pages"
+        : state.pages.length ? "All pages are archived" : "Nothing saved yet";
+}
+
+function getEmptyCopy(query) {
+  if (query) return "Try another search or clear your query.";
+  if (activeFolder !== ALL_FOLDERS) return "Assign pages to this folder from a page’s options.";
+  return activeFilter === "archived" ? "Pages you archive or leave unused for 30 days will appear here."
+    : activeFilter === "pinned" ? "Pin a page from its page options to keep it easy to find."
+      : activeFilter === "recent" ? "Pages used in the last 7 days appear here."
+        : state.pages.length ? "Your saved pages are safe in Archive. Restore one to bring it back here."
+          : "Save this page or use the context menu on any link to build your shortcuts.";
 }
 
 function sortPages(pages) {
@@ -424,6 +478,7 @@ function renderFolders() {
 async function removeFolder(folder) {
   state.pages = state.pages.map((page) => page.folder === folder ? { ...page, folder: "General" } : page);
   state.folders = state.folders.filter((item) => item !== folder);
+  if (activeFolder === folder) activeFolder = ALL_FOLDERS;
   await persist();
   renderFolders();
 }

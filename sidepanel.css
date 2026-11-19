@@ -77,7 +77,6 @@ kbd { border: 1px solid #394649; border-radius: 4px; padding: 2px 5px; font: 10p
 .page-card.is-archived .page-title { color: #a8b6b6; }
 
 
-
 body {
   height: 100vh;
   height: 100dvh;
@@ -127,4 +126,44 @@ body {
   padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
   background: var(--page);
+}
+
+.folder-filters {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  overflow-x: auto;
+  padding: 2px 1px 5px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.folder-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 9px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.folder-filter:hover {
+  border-color: #49665e;
+  color: var(--ink);
+}
+
+.folder-filter.active {
+  border-color: #3e5c55;
+  background: #1b302d;
+  color: var(--mint);
+}
+
+.folder-filter-count {
+  color: var(--quiet);
+  font-size: 8px;
+}
 }

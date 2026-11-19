@@ -84,3 +84,10 @@ test("focuses the library search when the mouse enters Pageport", () => {
   assert.match(sidepanel, /import \{ bindHoverSearchFocus \} from "\.\/sidepanel-focus\.js"/);
   assert.match(sidepanel, /bindHoverSearchFocus\(\{\s*root: document\.documentElement,\s*searchInput: elements\.search,\s*dialogs: \[elements\.folderDialog, elements\.settingsDialog, elements\.pageDialog\],\s*\}\)/);
 });
+
+test("provides a visible folder navigation control in the library", () => {
+  assert.ok(html.includes("id=\"folder-filters\" role=\"group\" aria-label=\"Filter by folder\""));
+  assert.ok(sidepanel.includes("elements.folderFilters.addEventListener(\"click\""));
+  assert.ok(sidepanel.includes("filterPagesByFolder(matchingPages, activeFolder)"));
+  assert.ok(sidepanel.includes("renderFolderFilters(matchingPages)"));
+});
