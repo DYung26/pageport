@@ -3,7 +3,7 @@ import { getPageportWindowTitle } from "./window-title.js";
 import { bindPageDialog } from "./page-dialog.js";
 import { isOriginCollapsed, toggleOriginCollapsed } from "./origin-groups.js";
 import { archiveInactivePages, setPageArchived } from "./archive.js";
-import { sortPagesByLastUsed } from "./page-order.js";
+import { sortPagesByLastUsed, sortPagesForGroupedView } from "./page-order.js";
 import { bindHoverSearchFocus } from "./sidepanel-focus.js";
 import { ALL_FOLDERS, countPagesByFolder, filterPagesByFolder } from "./folder-filter.js";
 
@@ -206,7 +206,7 @@ function render() {
     return `${page.title} ${page.hostname} ${page.url} ${page.folder}`.toLocaleLowerCase().includes(query);
   });
   const filteredPages = filterPagesByFolder(matchingPages, activeFolder);
-  const pages = state.viewMode === "list" ? sortPagesByLastUsed(filteredPages) : sortPages(filteredPages);
+  const pages = state.viewMode === "list" ? sortPagesByLastUsed(filteredPages) : sortPagesForGroupedView(filteredPages);
 
   elements.allCount.textContent = activePages.length;
   elements.archivedCount.textContent = archivedPages.length;
@@ -224,7 +224,7 @@ function render() {
   elements.libraryTitle.textContent = activeFolder === ALL_FOLDERS
     ? filterTitle
     : activeFilter === "all" ? `${activeFolder} pages` : `${filterTitle} · ${activeFolder}`;
-  elements.pageList.replaceChildren(...(state.viewMode === "list" ? pages.map(createPageCard) : renderOriginGroups(pages)));
+  elements.pageList.replaceChildren(...(state.viewMode === "list" ? pages.map(createPageCard) : renderGroupedPages(pages)));
   elements.emptyState.hidden = pages.length > 0;
   elements.emptyTitle.textContent = getEmptyTitle(query);
   elements.emptyCopy.textContent = getEmptyCopy(query);
@@ -277,8 +277,33 @@ function getEmptyCopy(query) {
           : "Save this page or use the context menu on any link to build your shortcuts.";
 }
 
-function sortPages(pages) {
-  return [...pages].sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.lastUsedAt - left.lastUsedAt);
+function renderGroupedPages(pages) {
+  const starredPages = pages.filter((page) => page.pinned);
+  const regularPages = pages.filter((page) => !page.pinned);
+  return [
+    ...(starredPages.length ? [renderStarredGroup(starredPages)] : []),
+    ...renderOriginGroups(regularPages),
+  ];
+}
+
+function renderStarredGroup(pages) {
+  const group = document.createElement("section");
+  group.className = "origin-group starred-group";
+
+  const heading = document.createElement("div");
+  heading.className = "starred-heading";
+  const title = document.createElement("span");
+  title.textContent = "Starred";
+  const count = document.createElement("span");
+  count.className = "origin-count";
+  count.textContent = `${pages.length} ${pages.length === 1 ? "page" : "pages"}`;
+  heading.append(title, count);
+
+  const content = document.createElement("div");
+  content.className = "origin-pages";
+  content.append(...pages.map(createPageCard));
+  group.append(heading, content);
+  return group;
 }
 
 function renderOriginGroups(pages) {

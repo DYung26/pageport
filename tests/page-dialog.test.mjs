@@ -75,7 +75,7 @@ test("provides an accessible grouped and list layout switch", () => {
   assert.match(html, /data-view-mode="grouped" type="button" aria-pressed="true"/);
   assert.match(html, /data-view-mode="list" type="button" aria-pressed="false"/);
   assert.match(sidepanel, /elements\.viewSwitch\.addEventListener\("click"/);
-  assert.match(sidepanel, /state\.viewMode === "list" \? pages\.map\(createPageCard\) : renderOriginGroups\(pages\)/);
+  assert.match(sidepanel, /state\.viewMode === "list" \? pages\.map\(createPageCard\) : renderGroupedPages\(pages\)/);
   assert.match(sidepanel, /payload\.viewMode === "list" \|\| payload\.viewMode === "grouped"/);
 });
 
@@ -91,3 +91,11 @@ test("provides a visible folder navigation control in the library", () => {
   assert.ok(sidepanel.includes("filterPagesByFolder(matchingPages, activeFolder)"));
   assert.ok(sidepanel.includes("renderFolderFilters(matchingPages)"));
 });
+
+test("renders all starred pages in one top-level group before website groups", () => {
+  assert.ok(sidepanel.includes("sortPagesForGroupedView(filteredPages)"));
+  assert.ok(sidepanel.includes("renderGroupedPages(pages)"));
+  assert.ok(sidepanel.includes("const starredPages = pages.filter((page) => page.pinned)"));
+  assert.ok(sidepanel.includes("const regularPages = pages.filter((page) => !page.pinned)"));
+  assert.ok(sidepanel.includes("renderStarredGroup(starredPages)"));
+});;
