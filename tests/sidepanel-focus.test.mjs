@@ -24,7 +24,7 @@ function createHarness(dialogs = []) {
 
   const unbind = bindHoverSearchFocus({ root, searchInput, dialogs });
   const dispatch = (type, pointerType = "mouse") => {
-    for (const { listener } of listeners.get(type) ?? []) listener({ pointerType });
+    for (const { listener } of listeners.get(type) ?? []) listener({ type, pointerType });
   };
 
   return { focusCalls, dispatch, listeners, unbind };
@@ -47,12 +47,21 @@ test("uses pointer movement when the initial pointer-enter event is missed", () 
   assert.deepEqual(harness.focusCalls, [{ preventScroll: true }]);
 });
 
+test("uses mouse movement as a fallback when Pointer Events do not report a mouse", () => {
+  const harness = createHarness();
+
+  harness.dispatch("mousemove", "");
+
+  assert.deepEqual(harness.focusCalls, [{ preventScroll: true }]);
+});
+
 test("focuses only once while the pointer remains inside the panel", () => {
   const harness = createHarness();
 
   harness.dispatch("pointerenter");
   harness.dispatch("pointermove");
   harness.dispatch("pointermove");
+  harness.dispatch("mousemove", "");
 
   assert.deepEqual(harness.focusCalls, [{ preventScroll: true }]);
 });
@@ -62,8 +71,8 @@ test("focuses again after the mouse leaves and re-enters the panel", () => {
 
   harness.dispatch("pointerenter");
   harness.dispatch("pointermove");
-  harness.dispatch("pointerleave");
-  harness.dispatch("pointermove");
+  harness.dispatch("mouseleave", "");
+  harness.dispatch("mousemove", "");
 
   assert.deepEqual(harness.focusCalls, [
     { preventScroll: true },
@@ -92,13 +101,13 @@ test("does not steal focus while a Pageport dialog is open", () => {
 
   settingsDialog.open = false;
   folderDialog.open = true;
-  harness.dispatch("pointerleave");
-  harness.dispatch("pointermove");
+  harness.dispatch("mouseleave", "");
+  harness.dispatch("mousemove", "");
   assert.deepEqual(harness.focusCalls, []);
 
   folderDialog.open = false;
-  harness.dispatch("pointerleave");
-  harness.dispatch("pointermove");
+  harness.dispatch("mouseleave", "");
+  harness.dispatch("mousemove", "");
   assert.deepEqual(harness.focusCalls, [{ preventScroll: true }]);
 });
 
@@ -107,5 +116,5 @@ test("removes every hover listener when the binding is cleaned up", () => {
 
   harness.unbind();
 
-  assert.deepEqual([...harness.listeners.values()], [[], [], []]);
+  assert.deepEqual([...harness.listeners.values()], [[], [], [], [], []]);
 });
