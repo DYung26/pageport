@@ -304,4 +304,18 @@ test("routes normal browser actions to the side panel and isolates Pageport wind
   await contextMenuClicked.listeners[0]({ linkUrl: "https://docs.example.org/help", linkText: "Different link title" }, normalTab);
   assert.equal(storedState.pages.find((page) => page.url === contextMenuSaved.url).title, "Help centre");
   assert.deepEqual(runtimeMessages.at(-1), { type: "PAGE_SAVE_RESULT", alreadySaved: true });
+
+  const originalStorageGet = chrome.storage.local.get;
+  const originalConsoleError = console.error;
+  const loggedErrors = [];
+  chrome.storage.local.get = async () => {
+    throw new Error("Storage unavailable");
+  };
+  console.error = (...args) => loggedErrors.push(args);
+  await contextMenuClicked.listeners[0]({ linkUrl: "https://failure.example.com/context" }, normalTab);
+  await command.listeners[0]("save-current-page", normalTab);
+  console.error = originalConsoleError;
+  chrome.storage.local.get = originalStorageGet;
+
+  assert.equal(loggedErrors.length, 2, "failed context-menu and shortcut saves are reported instead of becoming unhandled rejections");
 });

@@ -32,20 +32,24 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === MENU_OPEN_PAGEPORT) {
-    await openPageport(tab);
-    return;
-  }
+  try {
+    if (info.menuItemId === MENU_OPEN_PAGEPORT) {
+      await openPageport(tab);
+      return;
+    }
 
-  if (info.menuItemId === MENU_CLOSE_PAGEPORT) {
-    await closePageport(tab);
-    return;
-  }
+    if (info.menuItemId === MENU_CLOSE_PAGEPORT) {
+      await closePageport(tab);
+      return;
+    }
 
-  const url = info.linkUrl || tab?.url;
-  if (url && isWebPageUrl(url)) {
+    const url = info.linkUrl || tab?.url;
+    if (!url || !isWebPageUrl(url)) return;
+
     const result = await savePage({ url, title: info.linkText || tab?.title });
     notifyPageSaveResult(result);
+  } catch (error) {
+    console.error("Couldn't process the Pageport context-menu action:", error);
   }
 });
 
@@ -60,14 +64,8 @@ chrome.commands.onCommand.addListener((command, tab) => {
   }
 
   if (command === "save-current-page") {
-    if (tab?.url && isWebPageUrl(tab.url)) {
-      return savePage({ url: tab.url, title: tab.title }).then(notifyPageSaveResult);
-    }
-
-    return getLastFocusedTab().then((activeTab) => {
-      if (activeTab?.url && isWebPageUrl(activeTab.url)) {
-        return savePage({ url: activeTab.url, title: activeTab.title }).then(notifyPageSaveResult);
-      }
+    return saveCurrentPage(tab).catch((error) => {
+      console.error("Couldn't save the current page:", error);
     });
   }
 });
@@ -253,6 +251,14 @@ async function getLastFocusedTab() {
   if (!Number.isInteger(sourceWindow?.id)) return null;
   const [tab] = await chrome.tabs.query({ active: true, windowId: sourceWindow.id });
   return tab;
+}
+
+async function saveCurrentPage(tab) {
+  const activeTab = tab?.url && isWebPageUrl(tab.url) ? tab : await getLastFocusedTab();
+  if (!activeTab?.url || !isWebPageUrl(activeTab.url)) return;
+
+  const result = await savePage({ url: activeTab.url, title: activeTab.title });
+  notifyPageSaveResult(result);
 }
 
 async function getActiveTab(windowId) {

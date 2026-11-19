@@ -57,18 +57,15 @@ test("the close button cancels editing without saving", () => {
   assert.equal(closeCount, 1);
 });
 
-
 test("provides a dedicated archived-pages filter and count", () => {
   assert.match(html, /data-filter="archived" type="button">Archived <span id="archived-count">/);
 });
-
 
 test("shows a distinct confirmation when a page is already saved", () => {
   assert.match(sidepanel, /response\?\.alreadySaved \? "Already saved in Pageport" : "Page saved to Pageport"/);
   assert.match(sidepanel, /message\.type !== "PAGE_SAVE_RESULT"/);
   assert.match(sidepanel, /message\.alreadySaved \? "Already saved in Pageport" : "Page saved to Pageport"/);
 });
-
 
 test("provides an accessible grouped and list layout switch", () => {
   assert.match(html, /id="view-switch" role="group" aria-label="Page layout"/);
@@ -78,7 +75,6 @@ test("provides an accessible grouped and list layout switch", () => {
   assert.match(sidepanel, /state\.viewMode === "list" \? pages\.map\(createPageCard\) : renderGroupedPages\(pages\)/);
   assert.match(sidepanel, /payload\.viewMode === "list" \|\| payload\.viewMode === "grouped"/);
 });
-
 
 test("focuses the library search when the mouse enters Pageport", () => {
   assert.match(sidepanel, /import \{ bindHoverSearchFocus \} from "\.\/sidepanel-focus\.js"/);
@@ -122,4 +118,38 @@ test("offers an explicit action to open the selected page in a new tab", () => {
   assert.ok(sidepanel.includes("elements.openPageNewTab.addEventListener(\"click\", openActivePageInNewTab)"));
   assert.ok(sidepanel.includes("type: \"OPEN_SAVED_PAGE_NEW_TAB\""));
   assert.ok(sidepanel.includes("async function openActivePageInNewTab()"));
+});
+
+test("keeps the saved library render available when active-page lookup fails", () => {
+  const refreshStart = sidepanel.indexOf("async function refreshActivePage()");
+  const refreshEnd = sidepanel.indexOf("async function refreshShortcutLabels()", refreshStart);
+  const refreshFunction = sidepanel.slice(refreshStart, refreshEnd);
+
+  assert.ok(refreshFunction.includes("try {"));
+  assert.ok(refreshFunction.includes("catch (error)"));
+  assert.ok(refreshFunction.includes("elements.saveActive.disabled = true"));
+  assert.ok(sidepanel.indexOf("render();") > sidepanel.indexOf("await refreshActivePage();"));
+});
+
+test("announces the page count without making every saved page a live region", () => {
+  assert.ok(html.includes('id="result-count" role="status" aria-live="polite"'));
+  assert.ok(html.includes('<section class="library">'));
+  assert.ok(!html.includes('<section class="library" aria-live="polite">'));
+});
+
+
+test("keeps startup rendering available when automatic archive persistence fails", () => {
+  const startupStart = sidepanel.indexOf("const archivedState = archiveInactivePages(state)");
+  const startupEnd = sidepanel.indexOf("let activeFilter =", startupStart);
+  const startup = sidepanel.slice(startupStart, startupEnd);
+  const archiveStart = sidepanel.indexOf("async function archiveInactivePagesIfNeeded()");
+  const archiveEnd = sidepanel.indexOf("async function persist()", archiveStart);
+  const archiveFunction = sidepanel.slice(archiveStart, archiveEnd);
+
+  assert.ok(startup.includes("catch (error)"));
+  assert.ok(startup.includes("startupArchiveError = error"));
+  assert.ok(sidepanel.indexOf("render();") > sidepanel.indexOf("await refreshActivePage();"));
+  assert.ok(archiveFunction.includes("catch (error)"));
+  assert.ok(archiveFunction.includes("console.error"));
+  assert.ok(archiveFunction.includes("state = nextState"));
 });

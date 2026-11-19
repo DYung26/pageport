@@ -1,6 +1,11 @@
 const STORAGE_KEY = "pageport-state";
 
 export const DEFAULT_STATE = { pages: [], folders: ["General"], collapsedOrigins: [], viewMode: "grouped" };
+const MAX_FOLDER_NAME_LENGTH = 40;
+
+export function normalizeFolderName(value) {
+  return typeof value === "string" ? value.trim().slice(0, MAX_FOLDER_NAME_LENGTH) : "";
+}
 
 export async function readState() {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
@@ -16,10 +21,16 @@ export function normalizeState(value) {
     return structuredClone(DEFAULT_STATE);
   }
 
-  const folders = [...new Set(value.folders
-    .filter((folder) => typeof folder === "string" && folder.trim())
-    .map((folder) => folder.trim().slice(0, 40)))];
-  if (!folders.includes("General")) folders.unshift("General");
+  const folders = ["General"];
+  const folderNames = new Set(["general"]);
+  for (const valueFolder of value.folders) {
+    const folder = normalizeFolderName(valueFolder);
+    const key = folder.toLocaleLowerCase();
+    if (!folder || folderNames.has(key)) continue;
+    folderNames.add(key);
+    folders.push(folder);
+  }
+  const canonicalFolders = new Map(folders.map((folder) => [folder.toLocaleLowerCase(), folder]));
 
   const collapsedOrigins = [...new Set(
     (Array.isArray(value.collapsedOrigins) ? value.collapsedOrigins : []).filter(isValidOrigin),
@@ -33,7 +44,7 @@ export function normalizeState(value) {
       title: page.title.slice(0, 500),
       hostname: url.hostname,
       origin: url.origin,
-      folder: folders.includes(page.folder) ? page.folder : "General",
+      folder: canonicalFolders.get(normalizeFolderName(page.folder).toLocaleLowerCase()) ?? "General",
       pinned: page.pinned === true,
       createdAt: Number.isFinite(page.createdAt) ? page.createdAt : Date.now(),
       updatedAt: Number.isFinite(page.updatedAt) ? page.updatedAt : Date.now(),

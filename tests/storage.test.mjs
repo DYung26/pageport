@@ -53,7 +53,6 @@ test("drops malformed page entries", () => {
   assert.equal(state.pages.length, 1);
 });
 
-
 test("normalizes and deduplicates persisted collapsed origins", () => {
   const state = normalizeState({
     folders: ["General"],
@@ -151,4 +150,19 @@ test("reads and writes saved pages through extension local storage", async () =>
     if (previousChrome === undefined) delete globalThis.chrome;
     else globalThis.chrome = previousChrome;
   }
+});
+
+test("deduplicates canonical folder names after trimming and truncation", () => {
+  const sharedPrefix = "a".repeat(40);
+  const state = normalizeState({
+    folders: [" research ", "Research", "GENERAL", sharedPrefix + " first", sharedPrefix + " second"],
+    pages: [
+      page({ id: "research", folder: "RESEARCH" }),
+      page({ id: "truncated", folder: sharedPrefix + " another suffix" }),
+    ],
+  });
+
+  assert.deepEqual(state.folders, ["General", "research", sharedPrefix]);
+  assert.equal(state.pages[0].folder, "research");
+  assert.equal(state.pages[1].folder, sharedPrefix);
 });

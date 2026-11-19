@@ -18,61 +18,61 @@
       </header>
 
       <div class="scroll-content">
-      <section class="welcome">
-        <div class="welcome-copy">
-          <p class="eyebrow">YOUR WEB, WITH SHORTCUTS</p>
-          <h1>Go straight<br>to what matters.</h1>
-          <p class="subcopy">A home for the pages you come back to.</p>
-        </div>
-        <div class="route-art" aria-hidden="true">
-          <span class="route-line route-one"></span><span class="route-line route-two"></span>
-          <span class="route-node node-one"></span><span class="route-node node-two"></span><span class="route-node node-three"></span>
-          <span class="route-hub">↗</span>
-        </div>
-      </section>
-
-      <section class="capture-row" aria-label="Save current page">
-        <div class="capture-copy"><span class="capture-dot"></span><span id="active-page-label">Ready to save this page</span></div>
-        <button class="save-button" id="save-active" type="button">Save page <span>＋</span></button>
-      </section>
-
-      <section class="controls" aria-label="Find saved pages">
-        <label class="search-box">
-          <span aria-hidden="true">⌕</span>
-          <input id="search" type="search" placeholder="Search pages or sites" autocomplete="off">
-          <kbd>/</kbd>
-        </label>
-        <div class="filters" id="filters" role="group" aria-label="Page filters">
-          <button class="filter active" data-filter="all" type="button">All pages <span id="all-count">0</span></button>
-          <button class="filter" data-filter="pinned" type="button">Pinned</button>
-          <button class="filter" data-filter="recent" type="button">Recent</button>
-          <button class="filter" data-filter="archived" type="button">Archived <span id="archived-count">0</span></button>
-          <label class="folder-filter-wrap">
-            <select class="folder-filter-select" id="folder-filter" aria-label="Filter pages by folder">
-              <option value="">Folder</option>
-            </select>
-          </label>
-        </div>
-      </section>
-
-      <section class="library" aria-live="polite">
-        <div class="library-heading">
-          <h2 id="library-title">Your pages</h2>
-          <div class="library-tools">
-            <div class="view-switch" id="view-switch" role="group" aria-label="Page layout">
-              <button class="view-option active" data-view-mode="grouped" type="button" aria-pressed="true" title="Group pages by website">Grouped</button>
-              <button class="view-option" data-view-mode="list" type="button" aria-pressed="false" title="Show all pages in one list">List</button>
-            </div>
-            <span id="result-count">0 SAVED</span>
+        <section class="welcome">
+          <div class="welcome-copy">
+            <p class="eyebrow">YOUR WEB, WITH SHORTCUTS</p>
+            <h1>Go straight<br>to what matters.</h1>
+            <p class="subcopy">A home for the pages you come back to.</p>
           </div>
-        </div>
-        <div id="page-list" class="page-list"></div>
-        <div id="empty-state" class="empty-state" hidden>
-          <div class="empty-glyph" aria-hidden="true">↗</div>
-          <h3 id="empty-title">Nothing saved yet</h3>
-          <p id="empty-copy">Save this page or use the context menu on any link to build your shortcuts.</p>
-        </div>
-      </section>
+          <div class="route-art" aria-hidden="true">
+            <span class="route-line route-one"></span><span class="route-line route-two"></span>
+            <span class="route-node node-one"></span><span class="route-node node-two"></span><span class="route-node node-three"></span>
+            <span class="route-hub">↗</span>
+          </div>
+        </section>
+
+        <section class="capture-row" aria-label="Save current page">
+          <div class="capture-copy"><span class="capture-dot"></span><span id="active-page-label">Ready to save this page</span></div>
+          <button class="save-button" id="save-active" type="button">Save page <span>＋</span></button>
+        </section>
+
+        <section class="controls" aria-label="Find saved pages">
+          <label class="search-box">
+            <span aria-hidden="true">⌕</span>
+            <input id="search" type="search" placeholder="Search pages or sites" autocomplete="off">
+            <kbd>/</kbd>
+          </label>
+          <div class="filters" id="filters" role="group" aria-label="Page filters">
+            <button class="filter active" data-filter="all" type="button">All pages <span id="all-count">0</span></button>
+            <button class="filter" data-filter="pinned" type="button">Pinned</button>
+            <button class="filter" data-filter="recent" type="button">Recent</button>
+            <button class="filter" data-filter="archived" type="button">Archived <span id="archived-count">0</span></button>
+            <label class="folder-filter-wrap">
+              <select class="folder-filter-select" id="folder-filter" aria-label="Filter pages by folder">
+                <option value="">Folder</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section class="library">
+          <div class="library-heading">
+            <h2 id="library-title">Your pages</h2>
+            <div class="library-tools">
+              <div class="view-switch" id="view-switch" role="group" aria-label="Page layout">
+                <button class="view-option active" data-view-mode="grouped" type="button" aria-pressed="true" title="Group pages by website">Grouped</button>
+                <button class="view-option" data-view-mode="list" type="button" aria-pressed="false" title="Show all pages in one list">List</button>
+              </div>
+              <span id="result-count" role="status" aria-live="polite" aria-atomic="true">0 SAVED</span>
+            </div>
+          </div>
+          <div id="page-list" class="page-list"></div>
+          <div id="empty-state" class="empty-state" hidden>
+            <div class="empty-glyph" aria-hidden="true">↗</div>
+            <h3 id="empty-title">Nothing saved yet</h3>
+            <p id="empty-copy">Save this page or use the context menu on any link to build your shortcuts.</p>
+          </div>
+        </section>
 
       </div>
 

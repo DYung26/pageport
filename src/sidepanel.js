@@ -1,4 +1,4 @@
-import { normalizeState, readState, writeState } from "./storage.js";
+import { normalizeFolderName, normalizeState, readState, writeState } from "./storage.js";
 import { getPageportWindowTitle } from "./window-title.js";
 import { bindPageDialog } from "./page-dialog.js";
 import { isOriginCollapsed, toggleOriginCollapsed } from "./origin-groups.js";
@@ -53,9 +53,17 @@ bindHoverSearchFocus({
 
 let state = await readState();
 const archivedBeforeStartup = state.pages.filter((page) => page.archivedAt !== null).length;
-state = archiveInactivePages(state);
-const startupArchivedCount = state.pages.filter((page) => page.archivedAt !== null).length - archivedBeforeStartup;
-if (startupArchivedCount) await writeState(state);
+const archivedState = archiveInactivePages(state);
+const startupArchivedCount = archivedState.pages.filter((page) => page.archivedAt !== null).length - archivedBeforeStartup;
+let startupArchiveError = null;
+if (startupArchivedCount) {
+  try {
+    await writeState(archivedState);
+    state = archivedState;
+  } catch (error) {
+    startupArchiveError = error;
+  }
+}
 let activeFilter = "all";
 let activeFolder = NO_FOLDER_FILTER;
 let activePageId = null;
@@ -64,7 +72,13 @@ let toastTimeout;
 await refreshActivePage();
 void refreshShortcutLabels();
 render();
-if (startupArchivedCount) showToast(`${startupArchivedCount} inactive ${startupArchivedCount === 1 ? "page was" : "pages were"} moved to Archive`);
+if (startupArchiveError) {
+  console.error("Couldn't archive inactive pages during startup:", startupArchiveError);
+  showToast("Inactive pages could not be moved to Archive; try again later");
+} else if (startupArchivedCount) {
+  const noun = startupArchivedCount === 1 ? "page was" : "pages were";
+  showToast(String(startupArchivedCount) + " inactive " + noun + " moved to Archive");
+}
 window.setInterval(() => void archiveInactivePagesIfNeeded(), ARCHIVE_CHECK_INTERVAL_MS);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) void archiveInactivePagesIfNeeded();
@@ -82,11 +96,13 @@ chrome.storage.onChanged.addListener((changes, area) => {
   render();
 });
 
-chrome.tabs.onActivated.addListener(() => {
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  if (launchWindowId !== null && activeInfo.windowId !== launchWindowId) return;
   void refreshActivePage();
 });
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!tab.active || (launchWindowId !== null && tab.windowId !== launchWindowId)) return;
   if (changeInfo.status === "complete" || changeInfo.title) void refreshActivePage();
 });
 
@@ -154,7 +170,18 @@ document.addEventListener("keydown", (event) => {
 });
 
 async function refreshActivePage() {
-  const response = await chrome.runtime.sendMessage({ type: "GET_ACTIVE_PAGE", windowId: launchWindowId ?? undefined });
+  let response;
+  try {
+    response = await chrome.runtime.sendMessage({ type: "GET_ACTIVE_PAGE", windowId: launchWindowId ?? undefined });
+  } catch (error) {
+    console.error("Couldn't load the active browser page:", error);
+    elements.activePage.textContent = launchWindowId !== null
+      ? "The PWA window is no longer available"
+      : "Active page details are unavailable";
+    elements.saveActive.disabled = true;
+    return;
+  }
+
   const page = response?.page;
   if (launchWindowId !== null) document.title = getPageportWindowTitle(page);
   const canSave = Boolean(page?.url && ["http:", "https:"].includes(new URL(page.url).protocol));
@@ -489,10 +516,10 @@ async function removeActivePage() {
 }
 
 async function addFolder() {
-  const folder = elements.folderInput.value.trim();
+  const folder = normalizeFolderName(elements.folderInput.value);
   if (!folder) return;
   if (state.folders.some((item) => item.toLocaleLowerCase() === folder.toLocaleLowerCase())) return showToast("That folder already exists.");
-  state.folders = [...state.folders, folder.slice(0, 40)];
+  state.folders = [...state.folders, folder];
   elements.folderInput.value = "";
   await persist();
   renderFolders();
@@ -567,9 +594,19 @@ async function archiveInactivePagesIfNeeded() {
   if (nextState === state) return;
   const archivedCount = nextState.pages.filter((page) => page.archivedAt !== null).length
     - state.pages.filter((page) => page.archivedAt !== null).length;
+
+  try {
+    await writeState(nextState);
+  } catch (error) {
+    console.error("Couldn't archive inactive pages:", error);
+    showToast("Inactive pages could not be moved to Archive; try again later");
+    return;
+  }
+
   state = nextState;
-  await persist();
-  showToast(`${archivedCount} inactive ${archivedCount === 1 ? "page was" : "pages were"} moved to Archive`);
+  render();
+  const noun = archivedCount === 1 ? "page was" : "pages were";
+  showToast(String(archivedCount) + " inactive " + noun + " moved to Archive");
 }
 
 async function persist() {
