@@ -21,7 +21,7 @@ test("overlays fixed header and footer above content that scrolls underneath", (
   assert.match(css, /body\s*\{[^}]*height:\s*100dvh;[^}]*overflow:\s*hidden;/s);
   assert.match(css, /\.shell\s*\{[^}]*position:\s*relative;[^}]*height:\s*100dvh;/s);
   assert.match(css, /\.topbar\s*\{[^}]*position:\s*absolute;[^}]*top:\s*0;[^}]*z-index:\s*2;/s);
-  assert.match(css, /\.scroll-content\s*\{[^}]*position:\s*absolute;[^}]*top:\s*0;[^}]*left:\s*18px;[^}]*right:\s*18px;[^}]*bottom:\s*0;[^}]*overflow-y:\s*auto;[^}]*padding:\s*56px 0 calc\(58px \+ env\(safe-area-inset-bottom\)\);/s);
+  assert.match(css, /\.scroll-content\s*\{[^}]*position:\s*absolute;[^}]*top:\s*0;[^}]*left:\s*18px;[^}]*right:\s*18px;[^}]*bottom:\s*0;[^}]*overflow-x:\s*hidden;[^}]*overflow-y:\s*auto;[^}]*padding:\s*56px 0 calc\(58px \+ env\(safe-area-inset-bottom\)\);/s);
   assert.match(css, /\.footer\s*\{[^}]*position:\s*absolute;[^}]*bottom:\s*0;[^}]*z-index:\s*2;/s);
 });
 
