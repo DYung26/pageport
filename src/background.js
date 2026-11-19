@@ -7,6 +7,7 @@ const MESSAGE_SAVE_ACTIVE_PAGE = "SAVE_ACTIVE_PAGE";
 const MESSAGE_PAGE_SAVE_RESULT = "PAGE_SAVE_RESULT";
 const MESSAGE_GET_ACTIVE_PAGE = "GET_ACTIVE_PAGE";
 const MESSAGE_OPEN_SAVED_PAGE = "OPEN_SAVED_PAGE";
+const MESSAGE_OPEN_SAVED_PAGE_NEW_TAB = "OPEN_SAVED_PAGE_NEW_TAB";
 const pendingPageportWindows = new Map();
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -96,6 +97,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === MESSAGE_OPEN_SAVED_PAGE) {
     openSavedPage(message.url, message.windowId).then(
+      (result) => sendResponse(result),
+      (error) => sendResponse({ error: error.message }),
+    );
+    return true;
+  }
+
+  if (message.type === MESSAGE_OPEN_SAVED_PAGE_NEW_TAB) {
+    openSavedPageInNewTab(message.url, message.windowId).then(
       (result) => sendResponse(result),
       (error) => sendResponse({ error: error.message }),
     );
@@ -223,6 +232,18 @@ async function openSavedPage(value, windowId) {
   const tab = await getActiveTab(windowId);
   if (!tab?.id) throw new Error("No active tab is available in the target window.");
   await chrome.tabs.update(tab.id, { url: url.href });
+  if (Number.isInteger(windowId)) await chrome.windows.update(windowId, { focused: true });
+  return { tabId: tab.id, windowId: tab.windowId };
+}
+
+async function openSavedPageInNewTab(value, windowId) {
+  if (!isWebPageUrl(value)) throw new Error("Only web pages can be opened.");
+
+  const url = new URL(value);
+  const sourceTab = await getActiveTab(windowId);
+  if (!Number.isInteger(sourceTab?.windowId)) throw new Error("No browser window is available for this page.");
+
+  const tab = await chrome.tabs.create({ url: url.href, windowId: sourceTab.windowId, active: true });
   if (Number.isInteger(windowId)) await chrome.windows.update(windowId, { focused: true });
   return { tabId: tab.id, windowId: tab.windowId };
 }

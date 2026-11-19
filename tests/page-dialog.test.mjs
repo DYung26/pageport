@@ -98,4 +98,17 @@ test("renders all starred pages in one top-level group before website groups", (
   assert.ok(sidepanel.includes("const starredPages = pages.filter((page) => page.pinned)"));
   assert.ok(sidepanel.includes("const regularPages = pages.filter((page) => !page.pinned)"));
   assert.ok(sidepanel.includes("renderStarredGroup(starredPages)"));
-});;
+});
+
+test("uses a native anchor so browser link actions and modifier clicks work", () => {
+  assert.ok(sidepanel.includes("document.createElement(\"a\")"));
+  assert.ok(sidepanel.includes("main.href = page.url"));
+  assert.ok(sidepanel.includes("event.metaKey || event.ctrlKey || event.shiftKey || event.altKey"));
+});
+
+test("offers an explicit action to open the selected page in a new tab", () => {
+  assert.match(html, /id=\"open-page-new-tab\" type=\"button\">Open in new tab/);
+  assert.ok(sidepanel.includes("elements.openPageNewTab.addEventListener(\"click\", openActivePageInNewTab)"));
+  assert.ok(sidepanel.includes("type: \"OPEN_SAVED_PAGE_NEW_TAB\""));
+  assert.ok(sidepanel.includes("async function openActivePageInNewTab()"));
+});

@@ -28,6 +28,8 @@ test("routes normal browser actions to the side panel and isolates Pageport wind
   const focusedWindows = [];
   const removedWindows = [];
   const updatedTabs = [];
+  const createdTabs = [];
+  let nextTabId = 400;
   const openedPanels = [];
   const closedPanels = [];
   const apiCalls = [];
@@ -95,6 +97,16 @@ test("routes normal browser actions to the side panel and isolates Pageport wind
         if (target) Object.assign(target, options);
         updatedTabs.push({ id, ...options });
         return target;
+      },
+
+      async create(options) {
+        const siblings = tabsByWindow.get(options.windowId) ?? [];
+        siblings.forEach((tab) => { tab.active = false; });
+        const tab = { id: nextTabId++, windowId: options.windowId, url: options.url, active: options.active !== false };
+        siblings.push(tab);
+        tabsByWindow.set(options.windowId, siblings);
+        createdTabs.push({ ...options, id: tab.id });
+        return tab;
       },
     },
     sidePanel: {
@@ -216,6 +228,21 @@ test("routes normal browser actions to the side panel and isolates Pageport wind
     { id: 20, focused: true },
     { id: 30, focused: true },
   ]);
+
+  const appOneNewTab = await sendMessage({ type: "OPEN_SAVED_PAGE_NEW_TAB", windowId: 20, url: "https://saved.example.com/new-tab" });
+  assert.equal(appOneNewTab.tabId, createdTabs[0].id);
+  assert.deepEqual(createdTabs[0], {
+    url: "https://saved.example.com/new-tab",
+    windowId: 20,
+    active: true,
+    id: appOneNewTab.tabId,
+  });
+  assert.equal(appOneNewTab.windowId, 20);
+  assert.deepEqual(focusedWindows[4], { id: 20, focused: true });
+
+  const rejectedNewTab = await sendMessage({ type: "OPEN_SAVED_PAGE_NEW_TAB", windowId: 20, url: "javascript:alert(1)" });
+  assert.ok(rejectedNewTab.error);
+  assert.equal(createdTabs.length, 1, "invalid URLs never create tabs");
   const rejectedNavigation = await sendMessage({ type: "OPEN_SAVED_PAGE", windowId: 20, url: "javascript:alert(1)" });
   assert.ok(rejectedNavigation.error);
 

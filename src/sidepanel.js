@@ -42,6 +42,7 @@ const elements = {
   pageFolder: document.querySelector("#page-folder"),
   archivePage: document.querySelector("#archive-page"),
   deletePage: document.querySelector("#delete-page"),
+  openPageNewTab: document.querySelector("#open-page-new-tab"),
 };
 
 bindHoverSearchFocus({
@@ -144,6 +145,7 @@ bindPageDialog({
 });
 elements.archivePage.addEventListener("click", toggleArchiveActivePage);
 elements.deletePage.addEventListener("click", removeActivePage);
+elements.openPageNewTab.addEventListener("click", openActivePageInNewTab);
 document.querySelector("#export-data").addEventListener("click", exportBackup);
 document.querySelector("#import-data").addEventListener("change", importBackup);
 
@@ -362,10 +364,9 @@ function createPageCard(page) {
   icon.setAttribute("aria-hidden", "true");
   icon.textContent = page.hostname.slice(0, 1).toUpperCase();
 
-  const main = document.createElement("div");
+  const main = document.createElement("a");
   main.className = "page-main";
-  main.tabIndex = 0;
-  main.setAttribute("role", "link");
+  main.href = page.url;
   main.setAttribute("aria-label", `Open ${page.title}`);
   const title = document.createElement("span");
   title.className = "page-title";
@@ -374,11 +375,13 @@ function createPageCard(page) {
   domain.className = "page-domain";
   domain.textContent = `${formatPath(page.url)} · ${page.folder}${page.archivedAt !== null ? " · Archived" : ""}`;
   main.append(title, domain);
-  main.addEventListener("click", () => navigateTo(page));
-  main.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
+  main.addEventListener("click", (event) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      void markPageUsed(page);
+      return;
+    }
     event.preventDefault();
-    navigateTo(page);
+    void navigateTo(page);
   });
 
   const actions = document.createElement("div");
@@ -414,13 +417,36 @@ async function navigateTo(page) {
     });
     if (response?.error) return showToast(response.error);
     await refreshActivePage();
-    const now = Date.now();
-    state.pages = state.pages.map((item) => item.id === page.id
-      ? { ...item, updatedAt: now, lastUsedAt: now, archivedAt: null }
-      : item);
-    await persist();
+    await markPageUsed(page);
   } catch (error) {
     showToast(`Couldn't open this page: ${error.message}`);
+  }
+}
+
+async function markPageUsed(page) {
+  const now = Date.now();
+  state.pages = state.pages.map((item) => item.id === page.id
+    ? { ...item, updatedAt: now, lastUsedAt: now, archivedAt: null }
+    : item);
+  await persist();
+}
+
+async function openActivePageInNewTab() {
+  const page = state.pages.find((item) => item.id === activePageId);
+  if (!page) return elements.pageDialog.close();
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "OPEN_SAVED_PAGE_NEW_TAB",
+      url: page.url,
+      windowId: launchWindowId ?? undefined,
+    });
+    if (response?.error) return showToast(response.error);
+    await markPageUsed(page);
+    elements.pageDialog.close();
+    showToast("Opened in new tab");
+  } catch (error) {
+    showToast(`Could not open this page in a new tab: ${error.message}`);
   }
 }
 
