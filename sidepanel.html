@@ -32,8 +32,18 @@
         </section>
 
         <section class="capture-row" aria-label="Save current page">
-          <div class="capture-copy"><span class="capture-dot"></span><span id="active-page-label">Ready to save this page</span></div>
-          <button class="save-button" id="save-active" type="button">Save page <span>＋</span></button>
+          <div class="capture-copy">
+            <span class="capture-dot"></span>
+            <span class="capture-page-title" id="active-page-label">Ready to save this page</span>
+            <span class="saved-indicator" id="active-page-saved" hidden>Saved in Pageport</span>
+          </div>
+          <div class="capture-actions">
+            <button class="find-saved-button" id="find-saved-page" type="button" hidden aria-label="Find saved page in list" title="Scroll to this page in your list">Find</button>
+            <button class="save-button" id="save-active" type="button">
+              <span id="save-active-label">Save page</span>
+              <span id="save-active-icon" aria-hidden="true">＋</span>
+            </button>
+          </div>
         </section>
 
         <section class="controls" aria-label="Find saved pages">

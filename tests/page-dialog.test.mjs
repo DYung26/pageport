@@ -127,7 +127,8 @@ test("keeps the saved library render available when active-page lookup fails", (
 
   assert.ok(refreshFunction.includes("try {"));
   assert.ok(refreshFunction.includes("catch (error)"));
-  assert.ok(refreshFunction.includes("elements.saveActive.disabled = true"));
+  assert.ok(refreshFunction.includes("updateActivePageSavedState()"));
+  assert.ok(sidepanel.includes("elements.saveActive.disabled = !canSaveActivePage || isSaved"));
   assert.ok(sidepanel.indexOf("render();") > sidepanel.indexOf("await refreshActivePage();"));
 });
 
@@ -152,4 +153,36 @@ test("keeps startup rendering available when automatic archive persistence fails
   assert.ok(archiveFunction.includes("catch (error)"));
   assert.ok(archiveFunction.includes("console.error"));
   assert.ok(archiveFunction.includes("state = nextState"));
+});
+
+
+test("shows the saved-page indicator and find action in the active-page capture row", () => {
+  assert.ok(html.includes('id="active-page-saved"'));
+  assert.ok(html.includes('id="find-saved-page"'));
+  assert.ok(html.includes('id="save-active-label"'));
+  assert.ok(sidepanel.includes('elements.findSavedPage.addEventListener("click", findActiveSavedPage)'));
+  assert.ok(sidepanel.includes("elements.findSavedPage.hidden = !isSaved"));
+  assert.ok(sidepanel.includes('elements.saveActiveLabel.textContent = isSaved ? "Saved" : "Save page"'));
+});
+
+test("highlights the current saved page card and exposes its page identity", () => {
+  assert.ok(sidepanel.includes("card.dataset.pageId = page.id"));
+  assert.ok(sidepanel.includes('card.classList.toggle("is-current-page", isCurrentPage)'));
+  assert.ok(sidepanel.includes('card.setAttribute("aria-current", "location")'));
+  assert.ok(sidepanel.includes("findSavedPageByUrl(state.pages, activePageUrl)"));
+});
+
+test("find action clears conflicting filters, opens collapsed groups, and scrolls to the target", () => {
+  const start = sidepanel.indexOf("function findActiveSavedPage()");
+  const end = sidepanel.indexOf("async function refreshShortcutLabels()", start);
+  const findFunction = sidepanel.slice(start, end);
+
+  assert.ok(findFunction.includes('elements.search.value = ""'));
+  assert.ok(findFunction.includes("activeFolder = NO_FOLDER_FILTER"));
+  assert.ok(findFunction.includes('activeFilter = page.archivedAt !== null ? "archived" : "all"'));
+  assert.ok(findFunction.includes('state.viewMode !== "list"'));
+  assert.ok(findFunction.includes("collapsedOrigins: state.collapsedOrigins.filter"));
+  assert.ok(findFunction.includes("card.scrollIntoView"));
+  assert.ok(findFunction.includes("card.focus({ preventScroll: true })"));
+  assert.ok(findFunction.includes('card.classList.add("is-find-target")'));
 });

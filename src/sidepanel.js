@@ -6,15 +6,21 @@ import { archiveInactivePages, setPageArchived } from "./archive.js";
 import { sortPagesByLastUsed, sortPagesForGroupedView } from "./page-order.js";
 import { bindHoverSearchFocus } from "./sidepanel-focus.js";
 import { NO_FOLDER_FILTER, countPagesByFolder, filterPagesByFolder } from "./folder-filter.js";
+import { findSavedPageByUrl, normalizeWebPageUrl } from "./saved-page.js";
 
 const STORAGE_KEY = "pageport-state";
 const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const ARCHIVE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const FIND_TARGET_HIGHLIGHT_MS = 2400;
 const launchWindowId = getLaunchWindowId();
 
 const elements = {
   activePage: document.querySelector("#active-page-label"),
+  activePageSaved: document.querySelector("#active-page-saved"),
   saveActive: document.querySelector("#save-active"),
+  saveActiveLabel: document.querySelector("#save-active-label"),
+  saveActiveIcon: document.querySelector("#save-active-icon"),
+  findSavedPage: document.querySelector("#find-saved-page"),
   search: document.querySelector("#search"),
   filters: document.querySelector("#filters"),
   folderFilter: document.querySelector("#folder-filter"),
@@ -67,6 +73,10 @@ if (startupArchivedCount) {
 let activeFilter = "all";
 let activeFolder = NO_FOLDER_FILTER;
 let activePageId = null;
+let activePageUrl = null;
+let canSaveActivePage = false;
+let activeSavedPage = null;
+let findTargetTimeout;
 let toastTimeout;
 
 await refreshActivePage();
@@ -93,23 +103,26 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !changes[STORAGE_KEY]) return;
   state = normalizeState(changes[STORAGE_KEY].newValue);
   if (activeFolder !== NO_FOLDER_FILTER && !state.folders.includes(activeFolder)) activeFolder = NO_FOLDER_FILTER;
+  updateActivePageSavedState();
   render();
 });
 
 chrome.tabs.onActivated.addListener((activeInfo) => {
   if (launchWindowId !== null && activeInfo.windowId !== launchWindowId) return;
-  void refreshActivePage();
+  void refreshActivePageAndRender();
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (!tab.active || (launchWindowId !== null && tab.windowId !== launchWindowId)) return;
-  if (changeInfo.status === "complete" || changeInfo.title) void refreshActivePage();
+  if (changeInfo.status === "complete" || changeInfo.title) void refreshActivePageAndRender();
 });
 
 elements.saveActive.addEventListener("click", async () => {
   try {
     const response = await chrome.runtime.sendMessage({ type: "SAVE_ACTIVE_PAGE", windowId: launchWindowId ?? undefined });
     if (response?.error) return showToast(response.error);
+    await refreshActivePage();
+    render();
     showToast(response?.alreadySaved ? "Already saved in Pageport" : "Page saved to Pageport");
   } catch (error) {
     showToast(`Couldn't save this page: ${error.message}`);
@@ -121,7 +134,6 @@ elements.filters.addEventListener("click", (event) => {
   const button = event.target.closest("[data-filter]");
   if (!button) return;
   activeFilter = button.dataset.filter;
-  elements.filters.querySelectorAll(".filter").forEach((filter) => filter.classList.toggle("active", filter === button));
   render();
 });
 
@@ -163,6 +175,8 @@ elements.openPageNewTab.addEventListener("click", openActivePageInNewTab);
 document.querySelector("#export-data").addEventListener("click", exportBackup);
 document.querySelector("#import-data").addEventListener("change", importBackup);
 
+elements.findSavedPage.addEventListener("click", findActiveSavedPage);
+
 document.addEventListener("keydown", (event) => {
   if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey || isEditable(event.target)) return;
   event.preventDefault();
@@ -175,24 +189,80 @@ async function refreshActivePage() {
     response = await chrome.runtime.sendMessage({ type: "GET_ACTIVE_PAGE", windowId: launchWindowId ?? undefined });
   } catch (error) {
     console.error("Couldn't load the active browser page:", error);
+    activePageUrl = null;
+    canSaveActivePage = false;
     elements.activePage.textContent = launchWindowId !== null
       ? "The PWA window is no longer available"
       : "Active page details are unavailable";
-    elements.saveActive.disabled = true;
+    updateActivePageSavedState();
     return;
   }
 
   const page = response?.page;
   if (launchWindowId !== null) document.title = getPageportWindowTitle(page);
-  const canSave = Boolean(page?.url && ["http:", "https:"].includes(new URL(page.url).protocol));
-  if (canSave) {
+  activePageUrl = normalizeWebPageUrl(page?.url);
+  canSaveActivePage = activePageUrl !== null;
+  if (canSaveActivePage) {
     elements.activePage.textContent = page.title;
   } else if (launchWindowId !== null && response?.error) {
     elements.activePage.textContent = "The PWA window is no longer available";
   } else {
     elements.activePage.textContent = "This browser page cannot be saved";
   }
-  elements.saveActive.disabled = !canSave;
+  updateActivePageSavedState();
+}
+
+async function refreshActivePageAndRender() {
+  await refreshActivePage();
+  render();
+}
+
+function updateActivePageSavedState() {
+  activeSavedPage = findSavedPageByUrl(state.pages, activePageUrl);
+  const isSaved = activeSavedPage !== null;
+  elements.activePageSaved.hidden = !isSaved;
+  elements.activePageSaved.textContent = isSaved && activeSavedPage.archivedAt !== null
+    ? "Saved - Archived"
+    : "Saved in Pageport";
+  elements.findSavedPage.hidden = !isSaved;
+  elements.saveActive.disabled = !canSaveActivePage || isSaved;
+  elements.saveActiveLabel.textContent = isSaved ? "Saved" : "Save page";
+  elements.saveActiveIcon.hidden = isSaved;
+}
+
+function findActiveSavedPage() {
+  const page = activeSavedPage;
+  if (!page) return;
+
+  elements.search.value = "";
+  activeFolder = NO_FOLDER_FILTER;
+  activeFilter = page.archivedAt !== null ? "archived" : "all";
+
+  if (state.viewMode !== "list" && !page.pinned && isOriginCollapsed(state, page.origin)) {
+    state = {
+      ...state,
+      collapsedOrigins: state.collapsedOrigins.filter((origin) => origin !== page.origin),
+    };
+  }
+
+  render();
+
+  const card = [...elements.pageList.querySelectorAll(".page-card")]
+    .find((item) => item.dataset.pageId === page.id);
+  if (!card) {
+    showToast("This page is saved, but it could not be located in the current list.");
+    return;
+  }
+
+  window.clearTimeout(findTargetTimeout);
+  elements.pageList.querySelectorAll(".is-find-target").forEach((item) => item.classList.remove("is-find-target"));
+  card.classList.add("is-find-target");
+  card.focus({ preventScroll: true });
+  card.scrollIntoView({
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    block: "center",
+  });
+  findTargetTimeout = window.setTimeout(() => card.classList.remove("is-find-target"), FIND_TARGET_HIGHLIGHT_MS);
 }
 
 async function refreshShortcutLabels() {
@@ -223,6 +293,7 @@ async function refreshShortcutLabels() {
 }
 
 function render() {
+  updateActivePageSavedState();
   const query = elements.search.value.trim().toLocaleLowerCase();
   const archivedPages = state.pages.filter((page) => page.archivedAt !== null);
   const activePages = state.pages.filter((page) => page.archivedAt === null);
@@ -238,6 +309,11 @@ function render() {
   elements.allCount.textContent = activePages.length;
   elements.archivedCount.textContent = archivedPages.length;
   elements.resultCount.textContent = `${pages.length} ${pages.length === 1 ? "PAGE" : "PAGES"}`;
+  elements.filters.querySelectorAll(".filter").forEach((button) => {
+    const active = button.dataset.filter === activeFilter;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
   elements.viewSwitch.querySelectorAll("[data-view-mode]").forEach((button) => {
     const active = button.dataset.viewMode === state.viewMode;
     button.classList.toggle("active", active);
@@ -374,7 +450,12 @@ function renderOriginGroups(pages) {
 function createPageCard(page) {
   const card = document.createElement("article");
   card.className = "page-card";
+  card.dataset.pageId = page.id;
+  card.tabIndex = -1;
   card.classList.toggle("is-archived", page.archivedAt !== null);
+  const isCurrentPage = page.id === activeSavedPage?.id;
+  card.classList.toggle("is-current-page", isCurrentPage);
+  if (isCurrentPage) card.setAttribute("aria-current", "location");
 
   const icon = document.createElement("div");
   icon.className = "site-icon";
@@ -434,6 +515,7 @@ async function navigateTo(page) {
     });
     if (response?.error) return showToast(response.error);
     await refreshActivePage();
+    render();
     await markPageUsed(page);
   } catch (error) {
     showToast(`Couldn't open this page: ${error.message}`);
