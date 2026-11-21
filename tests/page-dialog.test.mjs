@@ -140,15 +140,15 @@ test("announces the page count without making every saved page a live region", (
 
 
 test("keeps startup rendering available when automatic archive persistence fails", () => {
-  const startupStart = sidepanel.indexOf("const archivedState = archiveInactivePages(state)");
+  const startupStart = sidepanel.indexOf("const startupRetentionState = applyRetentionPolicies(state)");
   const startupEnd = sidepanel.indexOf("let activeFilter =", startupStart);
   const startup = sidepanel.slice(startupStart, startupEnd);
-  const archiveStart = sidepanel.indexOf("async function archiveInactivePagesIfNeeded()");
+  const archiveStart = sidepanel.indexOf("async function applyRetentionPoliciesIfNeeded()");
   const archiveEnd = sidepanel.indexOf("async function persist()", archiveStart);
   const archiveFunction = sidepanel.slice(archiveStart, archiveEnd);
 
   assert.ok(startup.includes("catch (error)"));
-  assert.ok(startup.includes("startupArchiveError = error"));
+  assert.ok(startup.includes("startupRetentionError = error"));
   assert.ok(sidepanel.indexOf("render();") > sidepanel.indexOf("await refreshActivePage();"));
   assert.ok(archiveFunction.includes("catch (error)"));
   assert.ok(archiveFunction.includes("console.error"));
@@ -185,4 +185,14 @@ test("find action clears conflicting filters, opens collapsed groups, and scroll
   assert.ok(findFunction.includes("card.scrollIntoView"));
   assert.ok(findFunction.includes("card.focus({ preventScroll: true })"));
   assert.ok(findFunction.includes('card.classList.add("is-find-target")'));
+});
+
+
+test("exposes configurable archive and deletion retention settings", () => {
+  assert.ok(html.includes('id="archive-after-days"'));
+  assert.ok(html.includes('id="delete-after-days"'));
+  assert.ok(html.includes('id="never-delete-archived"'));
+  assert.ok(sidepanel.includes('elements.archiveAfterDays.addEventListener("change", saveRetentionSettings)'));
+  assert.ok(sidepanel.includes('elements.neverDeleteArchived.checked ? null'));
+  assert.ok(sidepanel.includes("renderRetentionSettings()"));
 });

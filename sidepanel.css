@@ -167,3 +167,13 @@ kbd { border: 1px solid #394649; border-radius: 4px; padding: 2px 5px; font: 10p
   margin-top: 5px;
   text-align: center;
 }
+
+.retention-settings { display: grid; gap: 14px; margin: 17px 0; }
+.retention-setting { display: grid; gap: 6px; }
+.retention-setting .new-folder-label { margin: 0; }
+.retention-input-row { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; }
+.retention-input-row input { width: 86px; height: 34px; border: 1px solid var(--line); border-radius: 7px; padding: 0 9px; background: var(--surface); color: var(--ink); font: inherit; font-size: 11px; }
+.retention-input-row input:disabled { opacity: .45; }
+.retention-toggle { display: flex; align-items: center; gap: 7px; color: var(--ink); font-size: 10px; }
+.retention-toggle input { accent-color: var(--mint); }
+.retention-setting .setting-note { margin: 0; }
