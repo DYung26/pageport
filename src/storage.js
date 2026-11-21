@@ -1,7 +1,32 @@
 const STORAGE_KEY = "pageport-state";
 
-export const DEFAULT_STATE = { pages: [], folders: ["General"], collapsedOrigins: [], viewMode: "grouped" };
+export const DEFAULT_RETENTION_SETTINGS = Object.freeze({ archiveAfterDays: 7, deleteAfterDays: 30 });
+export const MIN_RETENTION_DAYS = 1;
+export const MAX_RETENTION_DAYS = 365;
+
+export const DEFAULT_STATE = {
+  pages: [],
+  folders: ["General"],
+  collapsedOrigins: [],
+  viewMode: "grouped",
+  retention: DEFAULT_RETENTION_SETTINGS,
+};
 const MAX_FOLDER_NAME_LENGTH = 40;
+
+export function normalizeRetentionSettings(value) {
+  const archiveAfterDays = normalizeRetentionDays(value?.archiveAfterDays, DEFAULT_RETENTION_SETTINGS.archiveAfterDays);
+  const deleteAfterDays = value?.deleteAfterDays === null
+    ? null
+    : normalizeRetentionDays(value?.deleteAfterDays, DEFAULT_RETENTION_SETTINGS.deleteAfterDays);
+
+  return { archiveAfterDays, deleteAfterDays };
+}
+
+function normalizeRetentionDays(value, fallback) {
+  return Number.isInteger(value) && value >= MIN_RETENTION_DAYS && value <= MAX_RETENTION_DAYS
+    ? value
+    : fallback;
+}
 
 export function normalizeFolderName(value) {
   return typeof value === "string" ? value.trim().slice(0, MAX_FOLDER_NAME_LENGTH) : "";
@@ -60,6 +85,7 @@ export function normalizeState(value) {
     folders,
     collapsedOrigins,
     viewMode: value.viewMode === "list" ? "list" : "grouped",
+    retention: normalizeRetentionSettings(value.retention),
   };
 }
 

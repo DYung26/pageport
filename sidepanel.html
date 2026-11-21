@@ -100,7 +100,19 @@
       <form method="dialog">
         <div class="dialog-heading"><div><p class="eyebrow">PREFERENCES</p><h2>Pageport settings</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></div>
         <p class="setting-note">Your saved pages stay in this browser profile. Export a backup before moving to another device.</p>
-        <p class="setting-note">Pages unused for 30 days are moved to Archive automatically. Pinned pages are exempt; you can also archive or restore any page from its options.</p>
+        <section class="retention-settings" aria-label="Page retention">
+          <div class="retention-setting">
+            <label class="new-folder-label" for="archive-after-days">Archive pages after inactivity</label>
+            <div class="retention-input-row"><input id="archive-after-days" type="number" min="1" max="365" step="1" required><span>days</span></div>
+            <p class="setting-note">Unpinned pages move to Archive after this many days without being opened.</p>
+          </div>
+          <div class="retention-setting">
+            <label class="new-folder-label" for="delete-after-days">Permanently delete archived pages after</label>
+            <div class="retention-input-row"><input id="delete-after-days" type="number" min="1" max="365" step="1" required><span>days in Archive</span></div>
+            <label class="retention-toggle" for="never-delete-archived"><input id="never-delete-archived" type="checkbox"> Never delete archived pages</label>
+            <p class="setting-note">Changing to a shorter period can permanently delete pages that have already passed it.</p>
+          </div>
+        </section>
         <div class="settings-actions"><button id="export-data" type="button">Export backup</button><label class="import-button">Import backup<input id="import-data" type="file" accept="application/json"></label></div>
         <p class="setting-note">Keyboard shortcuts: <kbd>/</kbd> search, <kbd id="open-pageport-shortcut">Checking…</kbd> open Pageport, <kbd id="save-current-page-shortcut">Checking…</kbd> save current page. Change these in your browser’s extension shortcut settings.</p>
         <p class="setting-note" id="shortcut-status" hidden></p>

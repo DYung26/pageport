@@ -2,7 +2,7 @@ import { normalizeFolderName, normalizeState, readState, writeState } from "./st
 import { getPageportWindowTitle } from "./window-title.js";
 import { bindPageDialog } from "./page-dialog.js";
 import { isOriginCollapsed, toggleOriginCollapsed } from "./origin-groups.js";
-import { archiveInactivePages, setPageArchived } from "./archive.js";
+import { applyRetentionPolicies, setPageArchived } from "./archive.js";
 import { sortPagesByLastUsed, sortPagesForGroupedView } from "./page-order.js";
 import { bindHoverSearchFocus } from "./sidepanel-focus.js";
 import { NO_FOLDER_FILTER, countPagesByFolder, filterPagesByFolder } from "./folder-filter.js";
@@ -37,6 +37,9 @@ const elements = {
   folderList: document.querySelector("#folder-list"),
   folderInput: document.querySelector("#new-folder"),
   settingsDialog: document.querySelector("#settings-dialog"),
+  archiveAfterDays: document.querySelector("#archive-after-days"),
+  deleteAfterDays: document.querySelector("#delete-after-days"),
+  neverDeleteArchived: document.querySelector("#never-delete-archived"),
   openPageportShortcut: document.querySelector("#open-pageport-shortcut"),
   saveCurrentPageShortcut: document.querySelector("#save-current-page-shortcut"),
   shortcutStatus: document.querySelector("#shortcut-status"),
@@ -58,16 +61,15 @@ bindHoverSearchFocus({
 });
 
 let state = await readState();
-const archivedBeforeStartup = state.pages.filter((page) => page.archivedAt !== null).length;
-const archivedState = archiveInactivePages(state);
-const startupArchivedCount = archivedState.pages.filter((page) => page.archivedAt !== null).length - archivedBeforeStartup;
-let startupArchiveError = null;
-if (startupArchivedCount) {
+const startupRetentionState = applyRetentionPolicies(state);
+const startupRetentionChanges = getRetentionChanges(state, startupRetentionState);
+let startupRetentionError = null;
+if (startupRetentionState !== state) {
   try {
-    await writeState(archivedState);
-    state = archivedState;
+    await writeState(startupRetentionState);
+    state = startupRetentionState;
   } catch (error) {
-    startupArchiveError = error;
+    startupRetentionError = error;
   }
 }
 let activeFilter = "all";
@@ -82,16 +84,16 @@ let toastTimeout;
 await refreshActivePage();
 void refreshShortcutLabels();
 render();
-if (startupArchiveError) {
-  console.error("Couldn't archive inactive pages during startup:", startupArchiveError);
-  showToast("Inactive pages could not be moved to Archive; try again later");
-} else if (startupArchivedCount) {
-  const noun = startupArchivedCount === 1 ? "page was" : "pages were";
-  showToast(String(startupArchivedCount) + " inactive " + noun + " moved to Archive");
+if (startupRetentionError) {
+  console.error("Couldn't apply page retention during startup:", startupRetentionError);
+  showToast("Page retention could not be applied; try again later");
+} else {
+  const message = getRetentionChangeMessage(startupRetentionChanges);
+  if (message) showToast(message);
 }
-window.setInterval(() => void archiveInactivePagesIfNeeded(), ARCHIVE_CHECK_INTERVAL_MS);
+window.setInterval(() => void applyRetentionPoliciesIfNeeded(), ARCHIVE_CHECK_INTERVAL_MS);
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) void archiveInactivePagesIfNeeded();
+  if (!document.hidden) void applyRetentionPoliciesIfNeeded();
 });
 
 chrome.runtime.onMessage.addListener((message) => {
@@ -156,7 +158,16 @@ document.querySelector("#manage-folders").addEventListener("click", () => {
   elements.folderDialog.showModal();
 });
 
-document.querySelector("#settings-button").addEventListener("click", () => elements.settingsDialog.showModal());
+document.querySelector("#settings-button").addEventListener("click", () => {
+  renderRetentionSettings();
+  elements.settingsDialog.showModal();
+});
+elements.archiveAfterDays.addEventListener("change", saveRetentionSettings);
+elements.deleteAfterDays.addEventListener("change", saveRetentionSettings);
+elements.neverDeleteArchived.addEventListener("change", () => {
+  elements.deleteAfterDays.disabled = elements.neverDeleteArchived.checked;
+  void saveRetentionSettings();
+});
 document.querySelector("#add-folder").addEventListener("click", addFolder);
 elements.folderInput.addEventListener("keydown", (event) => {
   if (event.key !== "Enter") return;
@@ -365,7 +376,7 @@ function getEmptyTitle(query) {
 function getEmptyCopy(query) {
   if (query) return "Try another search or clear your query.";
   if (activeFolder !== NO_FOLDER_FILTER) return "Assign pages to this folder from a page’s options.";
-  return activeFilter === "archived" ? "Pages you archive or leave unused for 30 days will appear here."
+  return activeFilter === "archived" ? "Pages you archive or leave unused for " + state.retention.archiveAfterDays + " days will appear here."
     : activeFilter === "pinned" ? "Pin a page from its page options to keep it easy to find."
       : activeFilter === "recent" ? "Pages used in the last 7 days appear here."
         : state.pages.length ? "Your saved pages are safe in Archive. Restore one to bring it back here."
@@ -661,6 +672,7 @@ async function importBackup(event) {
       folders: [...state.folders, ...imported.folders],
       collapsedOrigins: [...new Set([...state.collapsedOrigins, ...imported.collapsedOrigins])],
       viewMode: importedViewMode,
+      retention: payload.retention && typeof payload.retention === "object" ? imported.retention : state.retention,
     });
     await persist();
     showToast("Backup imported");
@@ -671,24 +683,68 @@ async function importBackup(event) {
   }
 }
 
-async function archiveInactivePagesIfNeeded() {
-  const nextState = archiveInactivePages(state);
+async function applyRetentionPoliciesIfNeeded() {
+  const nextState = applyRetentionPolicies(state);
   if (nextState === state) return;
-  const archivedCount = nextState.pages.filter((page) => page.archivedAt !== null).length
-    - state.pages.filter((page) => page.archivedAt !== null).length;
+  const changes = getRetentionChanges(state, nextState);
 
   try {
     await writeState(nextState);
   } catch (error) {
-    console.error("Couldn't archive inactive pages:", error);
-    showToast("Inactive pages could not be moved to Archive; try again later");
+    console.error("Couldn't apply page retention:", error);
+    showToast("Page retention could not be applied; try again later");
     return;
   }
 
   state = nextState;
   render();
-  const noun = archivedCount === 1 ? "page was" : "pages were";
-  showToast(String(archivedCount) + " inactive " + noun + " moved to Archive");
+  showToast(getRetentionChangeMessage(changes));
+}
+
+function getRetentionChanges(previousState, nextState) {
+  const previouslyArchivedIds = new Set(previousState.pages.filter((page) => page.archivedAt !== null).map((page) => page.id));
+  const archivedCount = nextState.pages.filter((page) => page.archivedAt !== null && !previouslyArchivedIds.has(page.id)).length;
+  return { archivedCount, deletedCount: previousState.pages.length - nextState.pages.length };
+}
+
+function getRetentionChangeMessage({ archivedCount, deletedCount }) {
+  const messages = [];
+  if (archivedCount) messages.push(String(archivedCount) + " inactive " + (archivedCount === 1 ? "page was" : "pages were") + " moved to Archive");
+  if (deletedCount) messages.push(String(deletedCount) + " expired archived " + (deletedCount === 1 ? "page was" : "pages were") + " permanently deleted");
+  return messages.join("; ");
+}
+
+function renderRetentionSettings() {
+  elements.archiveAfterDays.value = state.retention.archiveAfterDays;
+  elements.deleteAfterDays.value = state.retention.deleteAfterDays ?? 30;
+  elements.neverDeleteArchived.checked = state.retention.deleteAfterDays === null;
+  elements.deleteAfterDays.disabled = elements.neverDeleteArchived.checked;
+}
+
+async function saveRetentionSettings() {
+  if (!elements.archiveAfterDays.reportValidity()) return;
+  if (!elements.neverDeleteArchived.checked && !elements.deleteAfterDays.reportValidity()) return;
+
+  const retention = {
+    archiveAfterDays: elements.archiveAfterDays.valueAsNumber,
+    deleteAfterDays: elements.neverDeleteArchived.checked ? null : elements.deleteAfterDays.valueAsNumber,
+  };
+  const nextState = applyRetentionPolicies({ ...state, retention });
+  const changes = getRetentionChanges(state, nextState);
+
+  try {
+    await writeState(nextState);
+  } catch (error) {
+    console.error("Couldn't save page retention settings:", error);
+    showToast("Retention settings could not be saved");
+    renderRetentionSettings();
+    return;
+  }
+
+  state = nextState;
+  render();
+  const message = getRetentionChangeMessage(changes);
+  showToast(message ? "Retention settings saved; " + message : "Retention settings saved");
 }
 
 async function persist() {

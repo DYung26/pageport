@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_STATE, isValidPage, normalizeState } from "../src/storage.js";
+import { DEFAULT_RETENTION_SETTINGS, DEFAULT_STATE, isValidPage, normalizeState } from "../src/storage.js";
 
 const page = (overrides = {}) => ({
   id: "page-1",
@@ -17,6 +17,24 @@ test("returns an empty default for malformed storage", () => {
   assert.deepEqual(normalizeState(null), DEFAULT_STATE);
   assert.deepEqual(normalizeState({ pages: [], folders: "bad" }), DEFAULT_STATE);
   assert.deepEqual(normalizeState({ pages: [], folders: ["General"] }).collapsedOrigins, []);
+});
+
+test("defaults to 7-day archiving and 30-day archived-page deletion", () => {
+  assert.deepEqual(DEFAULT_STATE.retention, { archiveAfterDays: 7, deleteAfterDays: 30 });
+  assert.deepEqual(normalizeState({ folders: ["General"], pages: [] }).retention, DEFAULT_RETENTION_SETTINGS);
+});
+
+test("normalizes retention durations and preserves the never-delete setting", () => {
+  assert.deepEqual(normalizeState({
+    folders: ["General"],
+    pages: [],
+    retention: { archiveAfterDays: 14, deleteAfterDays: null },
+  }).retention, { archiveAfterDays: 14, deleteAfterDays: null });
+  assert.deepEqual(normalizeState({
+    folders: ["General"],
+    pages: [],
+    retention: { archiveAfterDays: 0, deleteAfterDays: 999 },
+  }).retention, DEFAULT_RETENTION_SETTINGS);
 });
 
 test("defaults to grouped layout and accepts only supported view modes", () => {
@@ -133,6 +151,7 @@ test("reads and writes saved pages through extension local storage", async () =>
       pages: [page({ lastUsedAt: 180, archivedAt: 170 })],
       collapsedOrigins: ["https://example.com"],
       viewMode: "list",
+      retention: { archiveAfterDays: 14, deleteAfterDays: null },
     };
 
     await writeState(original);
@@ -145,6 +164,7 @@ test("reads and writes saved pages through extension local storage", async () =>
     assert.equal(restored.pages[0].archivedAt, 170);
     assert.deepEqual(restored.collapsedOrigins, ["https://example.com"]);
     assert.equal(restored.viewMode, "list");
+    assert.deepEqual(restored.retention, { archiveAfterDays: 14, deleteAfterDays: null });
     assert.ok(values["pageport-state"]);
   } finally {
     if (previousChrome === undefined) delete globalThis.chrome;
