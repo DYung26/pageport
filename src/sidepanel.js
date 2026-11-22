@@ -7,12 +7,14 @@ import { sortPagesByLastUsed, sortPagesForGroupedView } from "./page-order.js";
 import { bindHoverSearchFocus } from "./sidepanel-focus.js";
 import { NO_FOLDER_FILTER, countPagesByFolder, filterPagesByFolder } from "./folder-filter.js";
 import { findSavedPageByUrl, normalizeWebPageUrl } from "./saved-page.js";
+import { resolveOwningWindowId } from "./window-context.js";
 
 const STORAGE_KEY = "pageport-state";
 const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const ARCHIVE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 const FIND_TARGET_HIGHLIGHT_MS = 2400;
 const launchWindowId = getLaunchWindowId();
+let owningWindowId = launchWindowId;
 
 const elements = {
   activePage: document.querySelector("#active-page-label"),
@@ -90,6 +92,11 @@ let activeSavedPage = null;
 let findTargetTimeout;
 let toastTimeout;
 
+try {
+  owningWindowId = await resolveOwningWindowId(launchWindowId, chrome.windows);
+} catch (error) {
+  console.error("Couldn't resolve the Pageport window:", error);
+}
 await refreshWindowTabs();
 await refreshActivePage();
 void refreshShortcutLabels();
@@ -156,7 +163,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 elements.saveActive.addEventListener("click", async () => {
   try {
-    const response = await chrome.runtime.sendMessage({ type: "SAVE_ACTIVE_PAGE", windowId: launchWindowId ?? undefined });
+    const response = await chrome.runtime.sendMessage({ type: "SAVE_ACTIVE_PAGE", windowId: owningWindowId ?? undefined });
     if (response?.error) return showToast(response.error);
     await refreshActivePage();
     render();
@@ -238,16 +245,13 @@ document.addEventListener("keydown", (event) => {
 
 async function refreshWindowTabs() {
   try {
-    const sourceWindow = launchWindowId !== null
-      ? { id: launchWindowId }
-      : await chrome.windows.getLastFocused({ windowTypes: ["app", "normal"] });
-    if (!Number.isInteger(sourceWindow?.id)) throw new Error("The browser window is unavailable.");
-    windowTabsWindowId = sourceWindow.id;
+    if (!Number.isSafeInteger(owningWindowId)) throw new Error("The browser window is unavailable.");
+    windowTabsWindowId = owningWindowId;
     windowTabs = await chrome.tabs.query({ windowId: windowTabsWindowId });
   } catch (error) {
     console.error("Couldn't load tabs in this browser window:", error);
     windowTabs = [];
-    windowTabsWindowId = launchWindowId;
+    windowTabsWindowId = owningWindowId;
   }
 }
 
@@ -379,7 +383,7 @@ async function saveWindowTab(tab) {
 async function refreshActivePage() {
   let response;
   try {
-    response = await chrome.runtime.sendMessage({ type: "GET_ACTIVE_PAGE", windowId: launchWindowId ?? undefined });
+    response = await chrome.runtime.sendMessage({ type: "GET_ACTIVE_PAGE", windowId: owningWindowId ?? undefined });
   } catch (error) {
     console.error("Couldn't load the active browser page:", error);
     activePageUrl = null;
@@ -705,7 +709,7 @@ async function navigateTo(page) {
     const response = await chrome.runtime.sendMessage({
       type: "OPEN_SAVED_PAGE",
       url: url.href,
-      windowId: launchWindowId ?? undefined,
+      windowId: owningWindowId ?? undefined,
     });
     if (response?.error) return showToast(response.error);
     await refreshActivePage();
@@ -732,7 +736,7 @@ async function openActivePageInNewTab() {
     const response = await chrome.runtime.sendMessage({
       type: "OPEN_SAVED_PAGE_NEW_TAB",
       url: page.url,
-      windowId: launchWindowId ?? undefined,
+      windowId: owningWindowId ?? undefined,
     });
     if (response?.error) return showToast(response.error);
     await markPageUsed(page);
