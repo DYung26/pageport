@@ -16,6 +16,12 @@ const launchWindowId = getLaunchWindowId();
 
 const elements = {
   activePage: document.querySelector("#active-page-label"),
+  windowTabFilters: document.querySelector("#window-tab-filters"),
+  windowTabCount: document.querySelector("#window-tab-count"),
+  windowTabAllCount: document.querySelector("#window-tab-all-count"),
+  windowTabSavedCount: document.querySelector("#window-tab-saved-count"),
+  windowTabUnsavedCount: document.querySelector("#window-tab-unsaved-count"),
+  windowTabList: document.querySelector("#window-tab-list"),
   activePageSaved: document.querySelector("#active-page-saved"),
   saveActive: document.querySelector("#save-active"),
   saveActiveLabel: document.querySelector("#save-active-label"),
@@ -72,6 +78,9 @@ if (startupRetentionState !== state) {
     startupRetentionError = error;
   }
 }
+let windowTabs = [];
+let windowTabsWindowId = null;
+let windowTabsFilter = "all";
 let activeFilter = "all";
 let activeFolder = NO_FOLDER_FILTER;
 let activePageId = null;
@@ -81,6 +90,7 @@ let activeSavedPage = null;
 let findTargetTimeout;
 let toastTimeout;
 
+await refreshWindowTabs();
 await refreshActivePage();
 void refreshShortcutLabels();
 render();
@@ -110,13 +120,38 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 chrome.tabs.onActivated.addListener((activeInfo) => {
-  if (launchWindowId !== null && activeInfo.windowId !== launchWindowId) return;
-  void refreshActivePageAndRender();
+  if (activeInfo.windowId !== windowTabsWindowId) return;
+  void refreshActivePageAndWindowTabs();
+});
+
+chrome.tabs.onCreated.addListener((tab) => {
+  if (tab.windowId === windowTabsWindowId) void refreshWindowTabsAndRender();
+});
+
+chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+  if (removeInfo.windowId === windowTabsWindowId) void refreshWindowTabsAndRender();
+});
+
+chrome.tabs.onMoved.addListener((tabId, moveInfo) => {
+  if (moveInfo.windowId === windowTabsWindowId) void refreshWindowTabsAndRender();
+});
+
+chrome.tabs.onAttached.addListener((tabId, attachInfo) => {
+  if (attachInfo.newWindowId === windowTabsWindowId) void refreshWindowTabsAndRender();
+});
+
+chrome.tabs.onDetached.addListener((tabId, detachInfo) => {
+  if (detachInfo.oldWindowId === windowTabsWindowId) void refreshWindowTabsAndRender();
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (!tab.active || (launchWindowId !== null && tab.windowId !== launchWindowId)) return;
-  if (changeInfo.status === "complete" || changeInfo.title) void refreshActivePageAndRender();
+  if (tab.windowId !== windowTabsWindowId) return;
+  if (changeInfo.status !== "complete" && !changeInfo.title && !changeInfo.url) return;
+  if (tab.active) {
+    void refreshActivePageAndWindowTabs();
+    return;
+  }
+  void refreshWindowTabsAndRender();
 });
 
 elements.saveActive.addEventListener("click", async () => {
@@ -129,6 +164,13 @@ elements.saveActive.addEventListener("click", async () => {
   } catch (error) {
     showToast(`Couldn't save this page: ${error.message}`);
   }
+});
+
+elements.windowTabFilters.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-window-filter]");
+  if (!button) return;
+  windowTabsFilter = button.dataset.windowFilter;
+  renderWindowTabs();
 });
 
 elements.search.addEventListener("input", render);
@@ -193,6 +235,146 @@ document.addEventListener("keydown", (event) => {
   event.preventDefault();
   elements.search.focus();
 });
+
+async function refreshWindowTabs() {
+  try {
+    const sourceWindow = launchWindowId !== null
+      ? { id: launchWindowId }
+      : await chrome.windows.getLastFocused({ windowTypes: ["app", "normal"] });
+    if (!Number.isInteger(sourceWindow?.id)) throw new Error("The browser window is unavailable.");
+    windowTabsWindowId = sourceWindow.id;
+    windowTabs = await chrome.tabs.query({ windowId: windowTabsWindowId });
+  } catch (error) {
+    console.error("Couldn't load tabs in this browser window:", error);
+    windowTabs = [];
+    windowTabsWindowId = launchWindowId;
+  }
+}
+
+async function refreshWindowTabsAndRender() {
+  await refreshWindowTabs();
+  render();
+}
+
+async function refreshActivePageAndWindowTabs() {
+  await Promise.all([refreshActivePage(), refreshWindowTabs()]);
+  render();
+}
+
+function renderWindowTabs() {
+  const savedCount = windowTabs.filter((tab) => findSavedPageByUrl(state.pages, tab.url)).length;
+  const unsavedCount = windowTabs.filter((tab) => normalizeWebPageUrl(tab.url) && !findSavedPageByUrl(state.pages, tab.url)).length;
+  const counts = { all: windowTabs.length, saved: savedCount, unsaved: unsavedCount };
+
+  elements.windowTabCount.textContent = `${windowTabs.length} ${windowTabs.length === 1 ? "TAB" : "TABS"}`;
+  elements.windowTabAllCount.textContent = counts.all;
+  elements.windowTabSavedCount.textContent = counts.saved;
+  elements.windowTabUnsavedCount.textContent = counts.unsaved;
+  elements.windowTabFilters.querySelectorAll("[data-window-filter]").forEach((button) => {
+    const active = button.dataset.windowFilter === windowTabsFilter;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+
+  const tabs = windowTabs.filter((tab) => {
+    if (windowTabsFilter === "saved") return findSavedPageByUrl(state.pages, tab.url) !== null;
+    if (windowTabsFilter === "unsaved") return normalizeWebPageUrl(tab.url) !== null && !findSavedPageByUrl(state.pages, tab.url);
+    return true;
+  });
+
+  if (tabs.length) {
+    elements.windowTabList.replaceChildren(...tabs.map(createWindowTabCard));
+    return;
+  }
+
+  const empty = document.createElement("p");
+  empty.className = "window-tab-empty";
+  empty.textContent = windowTabsFilter === "saved" ? "No saved pages in this window"
+    : windowTabsFilter === "unsaved" ? "No unsaved web pages in this window"
+      : "No tabs are open in this window";
+  elements.windowTabList.replaceChildren(empty);
+}
+
+function createWindowTabCard(tab) {
+  const savedPage = findSavedPageByUrl(state.pages, tab.url);
+  const canSave = normalizeWebPageUrl(tab.url) !== null;
+  const card = document.createElement("article");
+  card.className = "window-tab-card";
+  card.classList.toggle("is-active", tab.active);
+
+  const icon = document.createElement("span");
+  icon.className = "window-tab-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = (tab.title || getWindowTabSubtitle(tab.url)).trim().slice(0, 1).toUpperCase() || "•";
+
+  const main = document.createElement("button");
+  main.type = "button";
+  main.className = "window-tab-main";
+  main.setAttribute("aria-label", `Switch to ${tab.title || "this tab"}`);
+  const title = document.createElement("span");
+  title.className = "window-tab-title";
+  title.textContent = tab.title?.trim() || "Untitled tab";
+  const domain = document.createElement("span");
+  domain.className = "window-tab-domain";
+  domain.textContent = getWindowTabSubtitle(tab.url);
+  main.append(title, domain);
+  main.addEventListener("click", () => void activateWindowTab(tab));
+
+  const actions = document.createElement("div");
+  actions.className = "window-tab-actions";
+  const status = document.createElement("span");
+  status.className = "window-tab-status";
+  status.textContent = [
+    tab.active ? "Current" : "",
+    savedPage ? (savedPage.archivedAt === null ? "Saved" : "Archived") : canSave ? "Not saved" : "Not saveable",
+  ].filter(Boolean).join(" · ");
+  actions.append(status);
+
+  if (!savedPage && canSave) {
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "window-tab-save";
+    save.textContent = "Save";
+    save.setAttribute("aria-label", `Save ${tab.title || "this tab"}`);
+    save.addEventListener("click", () => void saveWindowTab(tab));
+    actions.append(save);
+  }
+
+  card.append(icon, main, actions);
+  return card;
+}
+
+function getWindowTabSubtitle(value) {
+  const url = normalizeWebPageUrl(value);
+  if (url) return new URL(url).hostname;
+  return "Browser page";
+}
+
+async function activateWindowTab(tab) {
+  try {
+    await chrome.tabs.update(tab.id, { active: true });
+    await chrome.windows.update(tab.windowId, { focused: true });
+  } catch (error) {
+    showToast(`Couldn't switch to this tab: ${error.message}`);
+  }
+}
+
+async function saveWindowTab(tab) {
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "SAVE_TAB",
+      tabId: tab.id,
+      windowId: windowTabsWindowId,
+    });
+    if (response?.error) return showToast(response.error);
+    state = await readState();
+    await refreshWindowTabs();
+    render();
+    showToast(response.alreadySaved ? "Already saved in Pageport" : "Page saved to Pageport");
+  } catch (error) {
+    showToast(`Couldn't save this tab: ${error.message}`);
+  }
+}
 
 async function refreshActivePage() {
   let response;
@@ -305,6 +487,7 @@ async function refreshShortcutLabels() {
 
 function render() {
   updateActivePageSavedState();
+  renderWindowTabs();
   const query = elements.search.value.trim().toLocaleLowerCase();
   const archivedPages = state.pages.filter((page) => page.archivedAt !== null);
   const activePages = state.pages.filter((page) => page.archivedAt === null);

@@ -4,6 +4,7 @@ const MENU_OPEN_PAGEPORT = "pageport-open-pageport";
 const MENU_CLOSE_PAGEPORT = "pageport-close-pageport";
 const MENU_SAVE_PAGE = "pageport-save-page";
 const MESSAGE_SAVE_ACTIVE_PAGE = "SAVE_ACTIVE_PAGE";
+const MESSAGE_SAVE_TAB = "SAVE_TAB";
 const MESSAGE_PAGE_SAVE_RESULT = "PAGE_SAVE_RESULT";
 const MESSAGE_GET_ACTIVE_PAGE = "GET_ACTIVE_PAGE";
 const MESSAGE_OPEN_SAVED_PAGE = "OPEN_SAVED_PAGE";
@@ -80,6 +81,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === MESSAGE_SAVE_ACTIVE_PAGE) {
     getActiveTab(message.windowId).then((tab) => {
       if (!tab?.url) throw new Error("The active tab has no saveable URL.");
+      return savePage({ url: tab.url, title: tab.title });
+    }).then((result) => sendResponse({ page: result.page, alreadySaved: result.alreadySaved }))
+      .catch((error) => sendResponse({ error: error.message }));
+    return true;
+  }
+
+  if (message.type === MESSAGE_SAVE_TAB) {
+    getTabInWindow(message.tabId, message.windowId).then((tab) => {
+      if (!tab?.url || !isWebPageUrl(tab.url)) throw new Error("Only web pages can be saved.");
       return savePage({ url: tab.url, title: tab.title });
     }).then((result) => sendResponse({ page: result.page, alreadySaved: result.alreadySaved }))
       .catch((error) => sendResponse({ error: error.message }));
@@ -259,6 +269,17 @@ async function saveCurrentPage(tab) {
 
   const result = await savePage({ url: activeTab.url, title: activeTab.title });
   notifyPageSaveResult(result);
+}
+
+async function getTabInWindow(tabId, windowId) {
+  if (!Number.isInteger(tabId) || !Number.isInteger(windowId)) {
+    throw new Error("The selected tab is no longer available.");
+  }
+
+  const tabs = await chrome.tabs.query({ windowId });
+  const tab = tabs.find((item) => item.id === tabId);
+  if (!tab) throw new Error("This tab is no longer open in this window.");
+  return tab;
 }
 
 async function getActiveTab(windowId) {

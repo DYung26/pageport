@@ -266,6 +266,26 @@ test("routes normal browser actions to the side panel and isolates Pageport wind
   assert.equal(normalSaved.page.archivedAt, null);
   assert.equal(storedState.pages.length, 3);
 
+  const unsavedTab = { id: 4, windowId: 10, url: "https://unsaved.example.com/article", title: "Unsaved article", active: false };
+  tabsByWindow.get(10).push(unsavedTab);
+  const savedWindowTab = await sendMessage({ type: "SAVE_TAB", tabId: unsavedTab.id, windowId: 10 });
+  assert.equal(savedWindowTab.page.url, unsavedTab.url);
+  assert.equal(savedWindowTab.page.title, unsavedTab.title);
+  assert.equal(savedWindowTab.alreadySaved, false, "a non-active tab can be saved directly");
+  assert.equal(storedState.pages.length, 4);
+
+  const duplicateWindowTab = await sendMessage({ type: "SAVE_TAB", tabId: unsavedTab.id, windowId: 10 });
+  assert.equal(duplicateWindowTab.alreadySaved, true, "saving an already-saved tab does not create a duplicate");
+  assert.equal(storedState.pages.length, 4);
+
+  const tabFromAnotherWindow = await sendMessage({ type: "SAVE_TAB", tabId: unsavedTab.id, windowId: 30 });
+  assert.equal(tabFromAnotherWindow.error, "This tab is no longer open in this window.");
+
+  const browserTab = { id: 5, windowId: 10, url: "chrome://settings", title: "Settings", active: false };
+  tabsByWindow.get(10).push(browserTab);
+  const rejectedBrowserTab = await sendMessage({ type: "SAVE_TAB", tabId: browserTab.id, windowId: 10 });
+  assert.equal(rejectedBrowserTab.error, "Only web pages can be saved.");
+
   storedState.folders = [...storedState.folders, "Research"];
   storedState.pages = storedState.pages.map((page) => page.url === normalTab.url
     ? { ...page, archivedAt: Date.now() - 1000, folder: "Research", pinned: true }
@@ -275,7 +295,7 @@ test("routes normal browser actions to the side panel and isolates Pageport wind
   const stateBeforeDuplicateSave = structuredClone(storedState);
   const writesBeforeDuplicateSave = storageWrites;
   const duplicateSave = await sendMessage({ type: "SAVE_ACTIVE_PAGE" });
-  assert.equal(storedState.pages.length, 3, "saving an existing URL does not duplicate it");
+  assert.equal(storedState.pages.length, 4, "saving an existing URL does not duplicate it");
   assert.equal(duplicateSave.alreadySaved, true);
   assert.deepEqual(duplicateSave.page, existingPage, "the existing record is returned unchanged");
   assert.deepEqual(storedState, stateBeforeDuplicateSave, "title, folder, pin, archive state, and timestamps stay untouched");

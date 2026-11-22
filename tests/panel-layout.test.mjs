@@ -17,6 +17,17 @@ test("keeps the header and footer outside the scrolling content", () => {
   assert.ok(scrollEndIndex < footerIndex);
 });
 
+test("shows the current browser window tabs with saved and unsaved filters", () => {
+  const windowSection = html.indexOf('<section class="window-tabs"');
+  const controlsSection = html.indexOf('<section class="controls"');
+  assert.ok(windowSection >= 0 && windowSection < controlsSection);
+  assert.match(html, /data-window-filter="all"/);
+  assert.match(html, /data-window-filter="saved"/);
+  assert.match(html, /data-window-filter="unsaved"/);
+  assert.match(html, /id="window-tab-list"/);
+  assert.match(css, /\.window-tab-list\s*\{[^}]*max-height:\s*300px;[^}]*overflow-y:\s*auto;/s);
+});
+
 test("overlays fixed header and footer above full-width content that scrolls underneath", () => {
   assert.match(css, /body\s*\{[^}]*height:\s*100dvh;[^}]*overflow:\s*hidden;/s);
   assert.match(css, /\.shell\s*\{[^}]*position:\s*relative;[^}]*height:\s*100dvh;/s);

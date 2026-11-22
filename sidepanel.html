@@ -46,6 +46,22 @@
           </div>
         </section>
 
+        <section class="window-tabs" aria-label="Pages in this window">
+          <div class="window-tabs-heading">
+            <div>
+              <h2>This window</h2>
+              <p>Tabs open in this browser window</p>
+            </div>
+            <span id="window-tab-count" role="status" aria-live="polite">0 TABS</span>
+          </div>
+          <div class="window-tab-filters" id="window-tab-filters" role="group" aria-label="Filter window tabs">
+            <button class="window-tab-filter active" data-window-filter="all" type="button" aria-pressed="true">All <span id="window-tab-all-count">0</span></button>
+            <button class="window-tab-filter" data-window-filter="saved" type="button" aria-pressed="false">Saved <span id="window-tab-saved-count">0</span></button>
+            <button class="window-tab-filter" data-window-filter="unsaved" type="button" aria-pressed="false">Not saved <span id="window-tab-unsaved-count">0</span></button>
+          </div>
+          <div class="window-tab-list" id="window-tab-list" aria-live="polite"></div>
+        </section>
+
         <section class="controls" aria-label="Find saved pages">
           <label class="search-box">
             <span aria-hidden="true">⌕</span>

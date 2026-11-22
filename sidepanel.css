@@ -55,6 +55,31 @@ h1 { font: 800 29px/1.08 "Segoe UI", sans-serif; letter-spacing: -1.2px; margin-
 .find-saved-button[hidden] { display: none; }
 .capture-dot, .status-dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--mint); }
 .save-button { flex: 0 0 auto; display: inline-flex; gap: 9px; align-items: center; border: 0; border-radius: 8px; padding: 9px 11px; background: var(--mint); color: #15372f; font-size: 10px; font-weight: 700; }.save-button span { font-size: 15px; line-height: 10px; }
+.window-tabs { padding: 13px 0 12px; border-bottom: 1px solid var(--line); }
+.window-tabs-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.window-tabs-heading h2 { margin: 0 0 3px; font: 700 13px "Segoe UI", sans-serif; }
+.window-tabs-heading p { margin: 0; color: var(--muted); font-size: 9px; }
+.window-tabs-heading > span { flex: 0 0 auto; color: var(--quiet); font-size: 8px; font-weight: 700; letter-spacing: .8px; }
+.window-tab-filters { display: flex; gap: 5px; margin: 10px 0 8px; }
+.window-tab-filter { display: inline-flex; align-items: center; gap: 5px; border: 1px solid transparent; border-radius: 6px; padding: 6px 8px; background: transparent; color: var(--muted); font-size: 9px; }
+.window-tab-filter:hover { color: var(--ink); }
+.window-tab-filter.active { border-color: #3e5c55; background: #1b302d; color: var(--mint); }
+.window-tab-filter span { color: #69817b; font-size: 8px; }
+.window-tab-list { display: flex; flex-direction: column; gap: 4px; max-height: 300px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #46575a transparent; }
+.window-tab-card { display: grid; grid-template-columns: 27px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 47px; padding: 6px 7px; border: 1px solid #263336; border-radius: 7px; background: var(--surface); }
+.window-tab-card.is-active { border-color: #5c967f; background: #1a2b29; }
+.window-tab-icon { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: #243235; color: var(--mint); font: 700 10px "Segoe UI", sans-serif; }
+.window-tab-main { display: block; min-width: 0; border: 0; padding: 0; background: transparent; color: inherit; text-align: left; }
+.window-tab-title, .window-tab-domain { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.window-tab-title { margin-bottom: 3px; color: #e4ebeb; font-size: 10px; font-weight: 600; }
+.window-tab-card.is-active .window-tab-title { color: var(--mint); }
+.window-tab-domain { color: #879699; font-size: 8px; }
+.window-tab-actions { display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
+.window-tab-status { color: #8a9a9b; font-size: 8px; white-space: nowrap; }
+.window-tab-card.is-active .window-tab-status { color: var(--mint); }
+.window-tab-save { border: 1px solid #46645b; border-radius: 6px; padding: 5px 7px; background: #1a302b; color: var(--mint); font-size: 8px; font-weight: 700; }
+.window-tab-save:hover { border-color: var(--mint); }
+.window-tab-empty { padding: 15px 8px; color: var(--muted); font-size: 9px; text-align: center; }
 .controls { padding: 16px 0 12px; }
 .search-box { height: 39px; display: flex; align-items: center; gap: 9px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); }.search-box > span { font-size: 19px; }
 .search-box input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 11px; }.search-box input::placeholder { color: #6e7d80; }
